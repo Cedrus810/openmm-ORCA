@@ -1,0 +1,1374 @@
+# OpenMM–ORCA/OPI QM/MM 接口：设计与实施计划
+
+## 0. 项目定位
+
+目标不是再造一个 ASE，也不是把 ORCA 变成 OpenMM 的通用黑盒 calculator。
+
+目标是实现一个 **ORCA-native、OpenMM-native 的 QM/MM 力后端**：
+
+```text
+OpenMM System / Integrator
+        │
+        ├── 原有 MM forces
+        │
+        └── PythonForce
+                │
+                ▼
+          ORCA/OPI Backend
+                │
+                ├── QM geometry
+                ├── MM point charges
+                ├── ORCA-specific settings
+                ├── energy / QM gradient
+                └── MM point-charge gradient
+```
+
+第一原则：
+
+> OpenMM 继续负责 MD、MM 力场、积分器、约束、温压耦合和轨迹；
+> ORCA 只负责电子结构及 QM–MM electrostatic embedding；
+> OPI 负责 ORCA 的输入对象、任务执行、输出对象与版本适配。
+
+项目可以先作为 `openmm-pyscf` 的 ORCA sibling 实现；如果两套后端逐渐趋同，再把公共部分抽象成 `openmm-qm`。
+
+---
+
+# 1. 为什么值得使用 OPI
+
+OPI 的价值不是“让 ORCA 变快”，因为 ORCA 仍然是外部 executable；它的价值是让 OpenMM–ORCA 接口从脆弱的文件脚本变成一个相对稳定的 ORCA API 层。
+
+## 1.1 不直接手写 ORCA 输入/解析器
+
+传统做法：
+
+```text
+OpenMM
+  ↓
+format .inp
+  ↓
+write xyz / point-charge file
+  ↓
+subprocess ORCA
+  ↓
+grep output
+  ↓
+parse .engrad
+  ↓
+parse .pcgrad
+  ↓
+unit conversion
+```
+
+OPI 路线：
+
+```text
+OpenMM
+  ↓
+ORCABackend
+  ↓
+OPI Structure / PointCharge / Input objects
+  ↓
+OPI Calculator / Runner
+  ↓
+ORCA
+  ↓
+OPI Output + narrowly scoped native-file fallback
+```
+
+这样做的直接好处：
+
+- ORCA 输入关键字不需要自己拼字符串。
+- `charge`、`multiplicity`、坐标与 point charge 可以保持结构化。
+- ORCA 版本检查和运行逻辑集中到 OPI。
+- ORCA 新版本输入语法变化时，适配点主要位于 backend 层。
+- 后续加入 RIJCOSX、DLPNO、broken-symmetry、CASSCF、CPCM/SMD 等 ORCA-specific 功能时，不需要污染 OpenMM 层。
+- 测试可以分成“OpenMM bookkeeping”和“ORCA/OPI backend”两部分。
+- 可以保留 ORCA 原生 restart 文件和 scratch 生命周期，而不是被 ASE 的公共 calculator 抽象限制。
+
+## 1.2 不把 OPI 当成 in-process QM library
+
+必须明确：
+
+```text
+OPI ≠ liborca.so
+```
+
+一次 force callback 仍然大致是：
+
+```text
+OpenMM callback
+    ↓
+OPI 准备 calculation
+    ↓
+启动 ORCA
+    ↓
+SCF / gradient
+    ↓
+结果返回 Python
+```
+
+因此 OPI 的主要收益是：
+
+**可靠性、可维护性、ORCA 特性暴露和软件架构清晰度，而不是消灭 ORCA 启动/SCF 成本。**
+
+性能优化应该依赖：
+
+- SCF wavefunction restart / orbital reuse
+- 合理 scratch 管理
+- 减少无意义文件 I/O
+- MTS / RESPA（以后）
+- surrogate/ML correction（以后）
+- 限制 QM 区域规模
+
+而不是期待 OPI 本身提供数量级加速。
+
+---
+
+# 2. 项目范围
+
+## 2.1 v0.1：先把最小正确模型跑通
+
+支持：
+
+- OpenMM `PythonForce`
+- ORCA + OPI
+- full-QM 小分子
+- non-periodic QM/MM
+- fixed QM region
+- whole-molecule QM region
+- electronic embedding
+- QM energy
+- QM nuclear gradient
+- MM point-charge gradient
+- OpenMM 中 QM/MM electrostatic 去重
+- QM–MM LJ 保留
+- MM–MM 相互作用保持原样
+- NVE consistency test
+
+暂不支持：
+
+- link atoms
+- covalent QM/MM boundary
+- periodic electrostatic embedding
+- PME/QM coupling
+- adaptive QM region
+- polarizable MM
+- MTS
+- asynchronous QM
+- metadynamics 特殊接口
+
+这一版的目标不是“功能多”，而是：
+
+> **确认 OpenMM ↔ ORCA/OPI ↔ forces 的数学闭环完全正确。**
+
+---
+
+# 3. 总体架构
+
+建议不要把 PySCF/ORCA 逻辑继续塞进一个巨大 `*force.py`。
+
+```text
+openmm_orca/
+│
+├── __init__.py
+│
+├── potential.py
+│   └── ORCAPotential
+│
+├── force.py
+│   ├── ORCAPythonForce
+│   └── ElectronicEmbeddingORCAForce
+│
+├── backend/
+│   ├── base.py
+│   └── orca_opi.py
+│
+├── qmmm/
+│   ├── system.py
+│   ├── exclusions.py
+│   ├── charges.py
+│   └── boundary.py          # v0.3
+│
+├── runtime/
+│   ├── scratch.py
+│   ├── restart.py
+│   └── diagnostics.py
+│
+├── units.py
+│
+└── tests/
+    ├── test_full_qm.py
+    ├── test_embedding.py
+    ├── test_openmm_bookkeeping.py
+    ├── test_gradients_fd.py
+    └── test_nve.py
+```
+
+如果以后与 PySCF 后端合并：
+
+```text
+openmm_qm/
+│
+├── core/
+│   ├── potential.py
+│   ├── mixed_system.py
+│   └── result.py
+│
+└── backends/
+    ├── pyscf.py
+    └── orca_opi.py
+```
+
+但是第一版不必为了“通用”提前过度抽象。
+
+---
+
+# 4. Backend 协议
+
+核心接口必须非常小。
+
+```python
+@dataclass
+class QMResult:
+    energy: float                  # kJ/mol
+    qm_forces: np.ndarray          # (Nqm, 3), kJ/mol/nm
+    mm_forces: np.ndarray | None   # (Nmm, 3), kJ/mol/nm
+
+class QMBackend(Protocol):
+    def evaluate(
+        self,
+        qm_positions_nm,
+        *,
+        mm_positions_nm=None,
+        mm_charges_e=None,
+        box_vectors_nm=None,
+    ) -> QMResult:
+        ...
+```
+
+OpenMM 层永远不应该知道：
+
+- `.inp`
+- `.engrad`
+- `.pcgrad`
+- `.gbw`
+- ORCA simple keywords
+- `%scf`
+- `%pal`
+- `%maxcore`
+
+这些全部属于 `ORCAOPIBackend`。
+
+反过来，ORCA backend 不应该修改：
+
+- OpenMM `NonbondedForce`
+- exclusions
+- constraints
+- bonded terms
+- LJ interactions
+
+这些属于 QM/MM/OpenMM 层。
+
+---
+
+# 5. 力与能量定义
+
+对于 v0.1 whole-molecule electronic embedding：
+
+\[
+E_\mathrm{total}
+=
+E_\mathrm{OpenMM}^{modified}
++
+E_\mathrm{ORCA}^{QM+embedding}
+\]
+
+其中：
+
+## OpenMM 保留
+
+```text
+MM–MM bonded
+MM–MM electrostatics
+MM–MM LJ
+QM–MM LJ
+```
+
+## OpenMM 删除/置零
+
+```text
+QM internal bonded terms
+QM–QM classical electrostatics
+QM–QM LJ
+QM–MM classical electrostatics
+```
+
+## ORCA 提供
+
+```text
+QM internal electronic+nuclear energy
+QM nuclei ↔ MM point-charge interaction
+QM electrons ↔ MM point-charge interaction
+```
+
+因此必须同时得到：
+
+\[
+F_Q = -\frac{\partial E_\mathrm{ORCA}}{\partial R_Q}
+\]
+
+以及：
+
+\[
+F_M = -\frac{\partial E_\mathrm{ORCA}}{\partial R_M}
+\]
+
+第二项不能省略。
+
+如果 MM point charges 只极化 QM，而 QM 不把反作用力返回 MM：
+
+- Newton 第三定律/总动量行为会出问题；
+- NVE 漂移会很明显；
+- 得到的不是我们想要的完整 electronic-embedding dynamics。
+
+所以：
+
+> **`mm_forces` 是 ORCA backend 的必需输出，不是 optional decoration。**
+
+接口里允许 `None` 只是为了 full-QM 模式。
+
+---
+
+# 6. 从 openmm-pyscf 可直接继承的部分
+
+当前 `openmm-pyscf` 已经证明以下结构可行：
+
+- `PythonForce` callback
+- `createSystem()`
+- `createMixedSystem()`
+- QM atom selection
+- OpenMM `System` 深拷贝
+- QM 区 bonded term 清理
+- electrostatic exceptions
+- QM–MM LJ 保留
+- force group
+- constraint removal
+- MM charges 提取
+- full-system force reconstruction
+- OpenMM 单位转换
+
+因此第一版不应该重新发明这些。
+
+建议：
+
+1. 先保持行为与 `openmm-pyscf` 尽量一致；
+2. 把 PySCF-specific 部分替换为 ORCA/OPI；
+3. 用相同的水、小分子、离子对测试；
+4. 在数值结果合理后再重构公共 backend 接口。
+
+这样能把调试问题分成：
+
+```text
+OpenMM bookkeeping bug
+ORCA backend bug
+OPI integration bug
+```
+
+而不是三者同时变化。
+
+---
+
+# 7. ORCA/OPI Backend 设计
+
+## 7.1 用户配置对象
+
+```python
+ORCAPotential(
+    method="PBE0",
+    basis="def2-SVP",
+    charge=0,
+    multiplicity=1,
+    ncores=8,
+    maxcore_mb=2000,
+    simple_keywords=[...],
+    blocks={...},
+    scratch_root="...",
+    restart=True,
+)
+```
+
+原则：
+
+- 常用参数有显式参数；
+- ORCA 高级参数允许用户传原生 OPI objects；
+- 不试图重新设计 ORCA 的所有输入语义。
+
+例如：
+
+```python
+potential = ORCAPotential(
+    method="PBE0",
+    basis="def2-SVP",
+    charge=0,
+    multiplicity=2,
+    ncores=8,
+    opi_keywords=[...],
+    opi_blocks=[...],
+)
+```
+
+---
+
+## 7.2 Geometry construction
+
+每次 callback：
+
+```text
+OpenMM State
+    ↓
+positions [nm]
+    ↓
+QM atom slice
+    ↓
+nm → Å
+    ↓
+OPI Atom / Structure
+```
+
+electronic embedding 再加入：
+
+```text
+MM positions
+MM charges
+    ↓
+OPI PointCharge objects
+```
+
+要求：
+
+- atom ordering 永远固定；
+- QM atom index mapping 在初始化时冻结；
+- MM point-charge ordering 也冻结；
+- 每一步只更新坐标，不重新推断 topology。
+
+---
+
+## 7.3 Calculation lifecycle
+
+推荐一个固定 basename/scratch namespace：
+
+```text
+scratch/
+└── context_<uuid>/
+    ├── current/
+    ├── restart/
+    └── diagnostics/
+```
+
+不要每个 MD step 创建无限增长的新目录。
+
+理想流程：
+
+```text
+step N geometry
+    ↓
+prepare current ORCA input
+    ↓
+reuse previous electronic state when safe
+    ↓
+ORCA gradient calculation
+    ↓
+validate normal termination
+    ↓
+read energy
+read QM gradient
+read PC gradient
+    ↓
+convert units
+    ↓
+atomic replace/update restart state
+```
+
+若 OPI 当前没有直接暴露某个 QM/MM gradient quantity：
+
+> 允许在 `orca_opi.py` 内保留一个极窄的 ORCA-native fallback reader。
+
+例如：
+
+```text
+OPI = primary API
+native .engrad/.pcgrad reader = compatibility fallback
+```
+
+禁止把 parser 泄漏到 OpenMM 层。
+
+---
+
+# 8. SCF Restart / `.gbw` 策略
+
+对于 QM/MM MD，这可能是性能最重要的工程点之一。
+
+相邻 MD 步：
+
+\[
+R(t+\Delta t) \approx R(t)
+\]
+
+因此上一帧 orbitals 通常是下一帧非常好的初猜。
+
+设计：
+
+```python
+RestartPolicy(
+    enabled=True,
+    reuse_wavefunction=True,
+    reset_on_failure=True,
+    keep_last_good=True,
+)
+```
+
+状态机：
+
+```text
+first step
+   ↓
+fresh SCF
+   ↓
+save last-good electronic state
+   ↓
+next step
+   ↓
+try restart
+   ├── converged → replace last-good
+   └── failed
+         ↓
+      retry fresh SCF
+         ├── converged → replace last-good
+         └── failed → hard error
+```
+
+绝对不要：
+
+```text
+SCF failed
+→ silently return previous force
+```
+
+那会制造不可诊断的非物理动力学。
+
+---
+
+# 9. OpenMM `PythonForce` 层
+
+```python
+class ElectronicEmbeddingORCAForce:
+    def compute(self, state):
+        xyz = get_positions(state)
+
+        qm_xyz = xyz[self.qm_atoms]
+        mm_xyz = xyz[self.mm_atoms]
+
+        result = self.backend.evaluate(
+            qm_xyz,
+            mm_positions_nm=mm_xyz,
+            mm_charges_e=self.mm_charges,
+        )
+
+        forces = np.zeros_like(xyz)
+        forces[self.qm_atoms] += result.qm_forces
+        forces[self.mm_atoms] += result.mm_forces
+
+        return result.energy, forces
+```
+
+这一层应该保持极薄。
+
+它只做：
+
+- OpenMM state → numpy
+- index slicing
+- backend call
+- full force array assembly
+- unit wrapping
+
+它不负责 ORCA 配置。
+
+---
+
+# 10. Link Atom：v0.3 再做
+
+当前 whole-molecule 限制对于普通 solvent QM region 可以接受，但对酶活性位点不够。
+
+最终需要：
+
+```text
+MM atom A — QM atom B
+             │
+          boundary
+```
+
+生成 link H：
+
+\[
+R_H = R_B + \lambda (R_B - R_A)
+\]
+
+需要解决四件事：
+
+1. link atom 坐标生成；
+2. ORCA geometry 中加入 link atom；
+3. link-atom force 重新映射到真实 QM/MM 原子；
+4. boundary MM charge correction。
+
+模块建议：
+
+```python
+class LinkAtomManager:
+    def build_qm_geometry(...)
+    def redistribute_forces(...)
+    def modify_embedding_charges(...)
+```
+
+**不要让 ORCA backend 自己猜 boundary。**
+
+boundary 是体系定义的一部分，应由 QM/MM 层控制。
+
+第一版 link atom 只支持：
+
+- 单键边界
+- H link
+- static QM region
+- 明确指定 boundary pairs
+
+不做自动 chemical perception。
+
+---
+
+# 11. Periodic QM/MM：单独作为一个研究/工程阶段
+
+这是 PySCF 后端与 ORCA 后端真正不等价的地方。
+
+不能简单把：
+
+```text
+所有 MM 原子 point charges
+```
+
+直接塞进 ORCA。
+
+需要明确 electrostatic embedding 的周期策略。
+
+候选路线：
+
+## A. Cluster embedding
+
+QM 周围选取 cutoff 内 MM point charges：
+
+```text
+QM center
+   ↓
+minimum image
+   ↓
+MM charges within Rembed
+```
+
+优点：简单。
+
+缺点：
+
+- cutoff discontinuity；
+- 长程电势不正确；
+- 带电体系尤其危险。
+
+只适合 prototype。
+
+## B. Shift/switch embedding
+
+在 cutoff 附近平滑衰减 embedding charges。
+
+比裸 cutoff 好，但仍不是严格 PME equivalent。
+
+## C. PME → effective embedding potential
+
+从 OpenMM PME/网格得到 QM 区所需的长程电势/场，再通过 ORCA 可接受的 embedding 表达提供。
+
+这是更正确、也更复杂的路线。
+
+## D. ORCA-specific periodic embedding 能力
+
+如果未来 ORCA/OPI 提供直接满足需求的周期 electrostatic embedding API，再做 native backend。
+
+### 决策
+
+v0.1/v0.2：
+
+```text
+non-periodic only
+```
+
+不要为了“feature complete”把一个未经验证的 periodic approximation 混进基础实现。
+
+---
+
+# 12. PBC 与机械坐标仍需注意
+
+即使 v0.1 不做 periodic electronic embedding，也要从一开始保持坐标处理清晰：
+
+```text
+OpenMM wrapped coordinates
+        vs
+molecularly whole QM geometry
+```
+
+QM molecule 如果被 PBC 切开，ORCA 几何会直接坏掉。
+
+因此未来必须提供：
+
+```python
+QMMoleculeImager
+```
+
+负责：
+
+- 以 QM anchor 为基准重建 whole QM molecule；
+- MM embedding charges 取与 QM 区相适配的 image；
+- force mapping 保持原 atom index。
+
+---
+
+# 13. 错误处理
+
+QM/MM MD 最大忌讳是“算错了还继续跑”。
+
+backend 应显式检查：
+
+- ORCA 是否正常结束；
+- SCF 是否收敛；
+- gradient 是否存在；
+- atom count 是否一致；
+- PC gradient 数量是否等于 MM embedding charges 数量；
+- energy 是否 finite；
+- forces 是否 finite；
+- 最大 force 是否异常；
+- 输出是否来自当前 step，而不是旧文件。
+
+错误策略：
+
+```text
+SCF failure
+    ↓
+允许一次/有限次安全 retry
+    ↓
+仍失败
+    ↓
+raise exception and stop MD
+```
+
+debug bundle：
+
+```text
+failure_step_000123/
+├── geometry.xyz
+├── mm_charges.dat
+├── ORCA input
+├── ORCA output
+├── relevant gradient files
+└── metadata.json
+```
+
+这样用户可以直接复现实验。
+
+---
+
+# 14. 并发与线程安全
+
+OpenMM Context 和 ORCA scratch 必须一一隔离。
+
+禁止：
+
+```text
+两个 OpenMM Context
+    ↓
+同一个 ORCA basename / 同一个 .gbw
+```
+
+每个 backend instance 持有：
+
+```text
+context UUID
+scratch directory
+restart state
+lock
+```
+
+第一版明确：
+
+> 一个 `ORCAOPIBackend` 实例只服务一个 active OpenMM Context。
+
+未来再研究 replica / multi-context。
+
+---
+
+# 15. 单位约定
+
+内部 API 必须固定。
+
+建议 backend 边界：
+
+```text
+Input positions: nm
+Input charges: e
+
+Output energy: kJ/mol
+Output force: kJ/mol/nm
+```
+
+ORCA adapter 内部负责：
+
+```text
+nm ↔ Å / bohr
+Eh ↔ kJ/mol
+Eh/bohr ↔ kJ/mol/nm
+```
+
+任何 ORCA atomic-unit 常数只允许出现在：
+
+```text
+units.py
+```
+
+不要散布在 callback 和 tests 中。
+
+---
+
+# 16. 验证计划
+
+## 16.1 Full-QM water
+
+比较：
+
+```text
+直接 ORCA gradient
+vs
+ORCAOPIBackend
+vs
+OpenMM PythonForce state forces
+```
+
+要求：
+
+- energy 相同到 parser/数值精度；
+- forces component-wise 一致。
+
+---
+
+## 16.2 Finite-difference gradient
+
+对小分子每个 Cartesian coordinate：
+
+\[
+F_i^{FD}
+=
+-\frac{E(x_i+h)-E(x_i-h)}{2h}
+\]
+
+比较 analytic force。
+
+这是最重要的基础测试之一。
+
+---
+
+## 16.3 QM + external point charge
+
+例如：
+
+```text
+H2O + Q
+```
+
+测试：
+
+- QM atom force
+- point-charge force
+- 总力
+- 有限差分
+
+尤其验证：
+
+\[
+F_{PC} = -\partial E / \partial R_{PC}
+\]
+
+---
+
+## 16.4 OpenMM QM/MM dimer
+
+简单体系：
+
+```text
+QM water + MM water
+```
+
+检查：
+
+- QM-MM electrostatics 没有 double count；
+- QM-MM LJ 仍存在；
+- MM-MM 完全保持；
+- QM internal MM terms 已去掉。
+
+---
+
+## 16.5 Translation invariance
+
+整体平移体系：
+
+\[
+E(R+a)=E(R)
+\]
+
+非周期 isolated QM/MM 系统总力应接近零：
+
+\[
+\sum_i F_i \approx 0
+\]
+
+这会非常敏感地暴露漏掉 MM point-charge reaction force 的错误。
+
+---
+
+## 16.6 NVE test
+
+短时间：
+
+```text
+0.1–0.25 fs timestep
+no thermostat
+no barostat
+```
+
+检查 total energy drift。
+
+目标不是一开始追求长 ns，而是验证：
+
+- force 与 energy 一致；
+- callback 没有 stale result；
+- restart 不改变势能定义。
+
+---
+
+# 17. 与 PySCF backend 的交叉验证
+
+这是现成的巨大优势。
+
+选择双方都支持的低级别模型：
+
+```text
+HF / small basis
+```
+
+同一个：
+
+```text
+QM geometry
+MM point charges
+```
+
+分别计算：
+
+```text
+PySCF
+ORCA
+```
+
+比较：
+
+- QM energy 差异
+- QM gradient
+- MM point-charge gradient
+
+允许程序实现细节带来极小差别，但总体应该高度一致。
+
+这能快速判断：
+
+```text
+是 ORCA/OPI adapter 错
+还是 OpenMM bookkeeping 错
+```
+
+---
+
+# 18. API 草案
+
+## Full QM
+
+```python
+from openmm_orca import ORCAPotential
+
+potential = ORCAPotential(
+    method="PBE0",
+    basis="def2-SVP",
+    charge=0,
+    multiplicity=1,
+    ncores=8,
+)
+
+system = potential.createSystem(topology)
+```
+
+## QM/MM
+
+```python
+potential = ORCAPotential(
+    method="PBE0",
+    basis="def2-SVP",
+    charge=0,
+    multiplicity=2,
+    ncores=8,
+)
+
+mixed = potential.createMixedSystem(
+    topology,
+    mm_system,
+    atoms=qm_atoms,
+    embedding="electronic",
+)
+```
+
+最终目标仍然是保持用户体验接近：
+
+```text
+openmm-ml
+openmm-pyscf
+```
+
+而不是要求用户学习一个新的 MD framework。
+
+---
+
+# 19. ORCA-specific 高级功能
+
+这正是使用 OPI 而不是只走通用 ASE calculator 的主要长期收益。
+
+后续可以逐步暴露：
+
+```text
+RI / RIJCOSX
+DLPNO
+broken symmetry
+MOREAD / restart
+SCF convergence strategy
+level shifting
+dispersion correction
+CPCM / SMD
+relativistic Hamiltonian
+custom basis / ECP
+open-shell method
+CASSCF / NEVPT2 reference calculations
+```
+
+原则：
+
+> OpenMM core API 只暴露少量跨后端语义；
+> ORCA 的高级能力通过 `orca_options` / OPI objects 原生透传。
+
+不要为了“统一 API”把 ORCA 阉割成只剩：
+
+```text
+method + basis
+```
+
+---
+
+# 20. 性能路线
+
+基础正确后再做性能。
+
+优先级：
+
+### P0：SCF restart
+
+最值得先做。
+
+### P1：scratch 生命周期
+
+减少文件创建/复制和无意义清理。
+
+### P2：QM 区优化
+
+减少 embedding charge 数量和 QM atom 数。
+
+### P3：MTS
+
+例如：
+
+```text
+fast MM force     every step
+expensive QM      every N inner steps
+```
+
+但必须使用正确的 reversible MTS scheme，不能简单“缓存上一帧 QM force”。
+
+### P4：ML surrogate / Δ-learning
+
+未来可以：
+
+```text
+ORCA reference force
+        ↓
+ML fast force
+        +
+periodic ORCA correction
+```
+
+这属于另一个阶段，不应进入基础接口。
+
+---
+
+# 21. 开发里程碑
+
+## Milestone 0 — Backend smoke test
+
+完成：
+
+- OPI 启动 ORCA
+- H2O energy
+- H2O gradient
+- 单位转换
+- pytest
+
+通过标准：
+
+```text
+OPI backend == direct ORCA
+```
+
+---
+
+## Milestone 1 — Full-QM OpenMM
+
+完成：
+
+```text
+OpenMM PythonForce
+      ↓
+ORCA/OPI
+```
+
+测试：
+
+- energy
+- gradient
+- short NVE
+
+---
+
+## Milestone 2 — Non-periodic electronic embedding
+
+完成：
+
+- MM point charges
+- PC gradient
+- full force reconstruction
+- OpenMM electrostatic/LJ bookkeeping
+
+这是第一个真正的 QM/MM release：
+
+```text
+v0.1
+```
+
+---
+
+## Milestone 3 — Restart and robustness
+
+完成：
+
+- `.gbw`/electronic restart strategy
+- SCF retry policy
+- scratch manager
+- failure bundle
+- restart trajectory reproducibility tests
+
+```text
+v0.2
+```
+
+---
+
+## Milestone 4 — Link atoms
+
+完成：
+
+- explicit boundary pairs
+- H link generation
+- force redistribution
+- boundary charge policy
+- enzyme test
+
+```text
+v0.3
+```
+
+---
+
+## Milestone 5 — Periodic embedding
+
+单独设计并验证：
+
+- embedding electrostatic definition
+- PBC image policy
+- long-range correction
+- force consistency
+
+不要在没有 finite-difference/NVE 验证前宣称 PME-compatible。
+
+```text
+v0.4 / v0.5
+```
+
+---
+
+# 22. 第一批 benchmark systems
+
+建议按复杂度增加：
+
+```text
+1. H2O full QM
+2. H2O + external point charge
+3. QM H2O + MM H2O
+4. QM small ligand + MM waters
+5. whole-molecule QM ligand in protein pocket
+6. metal complex without covalent QM/MM boundary
+7. enzyme active site with link atoms
+```
+
+前四个负责验证数学正确性。
+
+第五个开始验证真实 OpenMM workflow。
+
+第六、七个才进入我们真正关心的 ORCA 优势区：
+
+```text
+transition metal
+open shell
+spin states
+broken symmetry
+enzyme chemistry
+```
+
+---
+
+# 23. 不应该做的事情
+
+第一版避免：
+
+- 为了兼容 ASE 再加一层 ASE。
+- 一开始支持所有 ORCA keywords。
+- 一开始做 adaptive QM/MM。
+- 一开始做 triclinic PME embedding。
+- 用缓存旧 force 掩盖 SCF failure。
+- 把 `.engrad/.pcgrad` parser 散落在整个项目。
+- 让 backend 修改 OpenMM `System`。
+- 让 OpenMM layer 理解 ORCA scratch 文件。
+- 在没有 finite-difference test 时相信“力看起来差不多”。
+
+---
+
+# 24. 最终设计判断
+
+这个项目最合理的抽象不是：
+
+```text
+OpenMM ↔ ASE ↔ ORCA
+```
+
+而是：
+
+```text
+                   ┌──────── PySCF backend
+OpenMM QM/MM Core ─┤
+                   └──────── ORCA/OPI backend
+```
+
+对于 ORCA：
+
+```text
+OpenMM
+   │
+   ├── dynamics / MM / topology / LJ / constraints
+   │
+   ▼
+QM/MM bookkeeping
+   │
+   ▼
+ORCAOPIBackend
+   │
+   ├── structured ORCA input
+   ├── point charges
+   ├── ORCA-specific options
+   ├── execution
+   ├── restart
+   └── structured output / narrow native fallback
+   │
+   ▼
+ORCA
+```
+
+OPI 的核心价值是：
+
+> **把“ORCA 是一个外部量化程序”这一事实封装在稳定、ORCA-aware 的 backend 中，而不是让这一事实污染整个 QM/MM driver。**
+
+因此第一阶段最值得做的不是“重新开发 QM/MM”。
+
+而是：
+
+> **复用 openmm-pyscf 已经完成的 OpenMM/QM-MM bookkeeping，抽出后端边界，然后实现 `ORCAOPIBackend`。**
+
+真正的新难点依次是：
+
+```text
+1. ORCA/OPI force backend correctness
+2. SCF restart / runtime robustness
+3. covalent boundary / link atoms
+4. periodic electrostatic embedding
+```
+
+前两项是软件工程问题。
+
+后三、四项才开始进入真正需要谨慎定义和验证的 QM/MM 方法问题。
+
+---
+
+# 25. 推荐的第一轮实现顺序
+
+```text
+[1] Fork/reference openmm-pyscf
+      ↓
+[2] 保留 createMixedSystem bookkeeping
+      ↓
+[3] 写 ORCAOPIBackend(full QM)
+      ↓
+[4] H2O finite-difference
+      ↓
+[5] 加 MM PointCharge
+      ↓
+[6] 读取/获得 point-charge gradient
+      ↓
+[7] QM + Q finite-difference
+      ↓
+[8] 接 ElectronicEmbeddingORCAForce
+      ↓
+[9] QM water + MM water
+      ↓
+[10] NVE
+      ↓
+[11] SCF restart
+      ↓
+[12] 发布 v0.1
+```
+
+这一顺序的关键是：
+
+**在任何复杂蛋白、金属、link atom、PBC 之前，把“能量—QM 力—MM 反作用力”三者的闭环证明干净。**
+
+这会让后面的每一个复杂功能都建立在可信的基础上。
