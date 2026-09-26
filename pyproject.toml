@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openmm-orca"
+version = "0.0.1"
+description = "OpenMM-driven QM/MM with ORCA (via OPI) as the QM backend"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "openmm>=8.5",
+    "orca-pi>=2.0",
+    "numpy",
+]
+
+[tool.setuptools.packages.find]
+include = ["openmmorca*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "orca: tests that require a working ORCA installation",
+    "slow: tests that take more than about a minute",
+]
+addopts = "-m 'not slow'"
