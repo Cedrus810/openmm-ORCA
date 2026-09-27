@@ -3,7 +3,7 @@
 > 文档性质：**设计规格**，回答"做什么、为什么这样做"。
 > 具体执行顺序、改哪些文件、每步怎么测，见实施计划 `docs/plans/2026-09-26-openmm-orca-implementation-plan.md`。
 > 原始讨论稿备份：`openmm_orca_opi_design_plan.md.orig`。
-> 最后更新：2026-09-26。
+> 最后更新：2026-09-27。
 
 ---
 
@@ -58,8 +58,8 @@
 
 | 阶段 | 可验证的成功标准 |
 |---|---|
-| v0.1（C 完成） | 有限差分：QM 原子力与点电荷力分量误差 < 1e-4 Eh/bohr（HF/def2-SVP，TightSCF）；非周期体系总力 ‖ΣF‖ < 1e-3 × max‖F_i‖；QM 水 + MM 水团簇 NVE 1 ps（0.25 fs 步长）总能量漂移 < 0.1 kJ/mol/ps（数值为目标值，M2 实测后固化） |
-| v0.2 | 连续 1000 步无人工干预；restart 与非 restart 轨迹前 50 步逐步能量差 < 1e-6 Eh；故意制造 SCF 失败时正确重试/报错并生成失败包 |
+| v0.1（C 完成） | 有限差分：QM 原子力与点电荷力分量误差 < 1e-4 Eh/bohr（HF/def2-SVP，TightSCF）；非周期体系总力 ‖ΣF‖ < 1e-3 × max‖F_i‖；QM 水 + MM 水团簇 NVE 1 ps（0.25 fs 步长，HF/STO-3G TightSCF）：总能量漂移 < 0.017 kJ/mol/ps，总能量标准差 < 0.05 kJ/mol（2026-09-27 实测 +0.0056 kJ/mol/ps、0.0163 kJ/mol，阈值取约 3 倍；原目标 0.1 / 0.5）。初速度必须去掉质心平动：`setVelocitiesToTemperature` 生成的速度带质心运动，`ForceField.createSystem` 默认加的 `CMMotionRemover` 会在第一步把这部分动能（本团簇约 10.7 kJ/mol）直接删掉，造成一个假的能量跳变，未处理时拟合出的漂移为 −0.153 kJ/mol/ps、标准差 0.53 kJ/mol |
+| v0.2 | 连续 1000 步无人工干预；restart 与非 restart 轨迹前 50 步逐步能量差 < 1e-6 Eh（两条轨迹必须从同一个初始状态出发：各自做能量最小化时，SCF 初猜不同带来的约 1e-9 Eh 噪声会让 L-BFGS 走不同路径，实测第 0 步就差 9e-5 Eh；2026-09-27 通过）；故意制造 SCF 失败时正确重试/报错并生成失败包 |
 | v0.3 | 带共价边界的小体系（例：乙醇 QM 取 C–OH 端，另一端 MM）有限差分通过，力正确回分到 Q1/M1 |
 | v0.4 | 溶剂化酶体系（PBC + PME）在 NVT 下稳定运行 ≥ 1 ps，每步耗时分解有记录 |
 
@@ -110,6 +110,22 @@
    ```
    调优后仍有约 1.4 s 的 MPI 额外开销，所以 **QM 区小的时候串行更快**，`nprocs` 应根据 QM 区大小实测选择（见实施计划 M3 基准任务）。
 3. **ORCA 没有常驻/服务模式。** 每次计算都由 `orca` 主程序拉起各模块子进程。OPI 的 `CalcServer`/`OpiServer` 是反方向的常驻（让 Python 计算器常驻、由 ORCA 通过 ExtOpt 调用），不适用于本项目。
+4. **ORCA 安装目录不要放在 NFS 上跑 MD（2026-09-27 实测）。** 本机 `/home/ruigengji` 是 NFS 挂载，ORCA 每步都要从安装目录启动多个静态链接的大程序（每个约 31 MB）。其他任务压满 NFS 后，同一个 H2O HF/STO-3G 步从 0.4 s 涨到 3.5 s（进程卡在 D 状态），1 ps NVE 从约 30 分钟变成 2 小时以上。做法：把 ORCA 复制到本地盘或 tmpfs，并让 `OPI_ORCA` 指向副本。不需要 `autoci_*`（13.5 GB，耦合簇/CI 的自动生成代码），其余约 3.8 GB，例如 `/dev/shm/orca611-<user>`。Python 环境（`miniforge3`）同样在 NFS 上，NFS 拥堵时解释器启动加 import 要几分钟。
+
+### 2.2.1 30–50 原子体系的 nprocs 实测（Task 14）
+
+`examples/bench_nprocs.py examples/data/water12.xyz`（12 个水，36 原子），能量 + 梯度，`TightSCF`，`restart=False`（每次全新 SCF）；每个 nprocs 先预热一次，再取 3 次的中位数。ORCA 在 tmpfs 上；MPI 进程用 `PRTE_MCA_hwloc_default_cpu_list=4-35` 限定在物理核 4–35（见 §8.6），同时另有 2 个串行 ORCA 任务占用核 0–2。2026-09-27，2× Xeon Gold 6138。
+
+| nprocs | HF/def2-SVP (s) | 加速比 | PBE0/def2-SVP RIJCOSX def2/J (s) | 加速比 |
+|---|---|---|---|---|
+| 1 | 59.6 | 1.0 | 98.9 | 1.0 |
+| 2 | 35.4 | 1.7 | 53.1 | 1.9 |
+| 4 | 20.2 | 3.0 | 33.2 | 3.0 |
+| 8 | 12.9 | 4.6 | 20.3 | 4.9 |
+| 16 | 9.7 | 6.2 | 15.3 | 6.5 |
+| 32 | 7.5 | 8.0 | 11.5 | 8.6 |
+
+结论：对 36 原子体系，8 核以内接近线性，16 核之后收益明显变小（16→32 核只快约 1.3 倍）。几十原子的 QM 区用 8–16 核比较划算，剩余的核可以同时跑别的任务。
 
 ### 2.3 点电荷：必须用 `%pointcharges` 文件，不能用 inline `Q`
 
@@ -485,7 +501,9 @@ H  ...
 
 ### 8.6 MPI 与线程
 
-- `nprocs > 1`：只在 ORCA 运行期间设置 §2.2 的 `OMPI_MCA_*` 与 `OMP_NUM_THREADS=1`，运行结束（包括异常）后恢复原值。OPI Runner 通过 `subprocess.run` 继承 `os.environ`，没有传 env 的参数，所以用一个上下文管理器临时修改 `os.environ` 并在 `finally` 中恢复（OPI 自己的 `_orca_environment` 也是这样做的）。
+- `nprocs > 1`：只在 ORCA 运行期间设置 §2.2 的 `OMPI_MCA_*` 与 `OMP_NUM_THREADS=1`，运行结束（包括异常）后恢复原值。OPI Runner 通过 `subprocess.run` 继承 `os.environ`，没有传 env 的参数，所以用一个上下文管理器临时修改 `os.environ` 并在 `finally` 中恢复。
+- **OPI 的环境恢复有 bug（2026-09-27 实测，OPI 2.0.0）**：`_orca_environment`（装饰在 `Runner.run` 上，`check_version` 也经过它）在 `finally` 里执行 `os.environ = org_env`，其中 `org_env = os.environ.copy()` 是普通 dict。第一次调用 Runner 之后，`os.environ` 就不再是 `os._Environ`，后续修改不会调用 putenv，子进程收不到。后果：第一次 ORCA 调用是串行时，之后所有 nprocs>1 的调用都拿不到 MCA 设置，每次退回约 10 s 的 MPI 启动开销；而 OPI 自己在 PATH/LD_LIBRARY_PATH 前面追加的路径和我们设的变量，也永远留在进程环境里。后端的对策是 `_preserve_os_environ()`：每次调用 Runner（`check_version` 和 `run_orca`）前保存真正的 `os.environ` 对象和它的内容，调用后把这个对象放回 `os.environ`，再逐个变量恢复原值（`os._Environ` 的赋值和删除会调用 putenv/unsetenv）。测试在全新的 Python 进程里检查子进程实际继承到的环境（`tests/test_orca_mpi.py`），不能只看 `os.environ`，否则会被前面测试的状态掩盖。
+- **CPU 绑定（2026-09-27 实测）**：OpenMPI 5 的 `mpirun` 不理会调用者的 `taskset` 亲和性，总是从 0 号核开始按核绑定进程。同一台机器上同时跑两个 nprocs>1 的 ORCA，或 ORCA 和别的程序共用机器时，会互相抢同一批核（实测 nprocs=2 比串行还慢）。要把 ORCA 限定在指定核上，用 `PRTE_MCA_hwloc_default_cpu_list=4-35`（`OMPI_MCA_` 前缀无效）。后端不自动设置它，由用户或作业脚本决定。
 - **PBS 任务内的槽位限制（2026-09-27 实测）**：OpenMPI 5/PRRTE 会读取资源管理器分配；任务只分到 1 核时 `mpirun -np 2` 报 "Not enough slots available"，ORCA 在 Startup 异常终止。**并行 ORCA 要求任务申请的核数 ≥ nprocs**（`qsub -l select=1:ncpus=N`）；确实要超订时由用户显式设 `OMPI_MCA_rmaps_default_mapping_policy=:oversubscribe`（或 PRTE_MCA_ 前缀），后端绝不自动超订。测试的 `require_mpi` fixture 用真实 `mpirun -np 2 hostname` 探针判定。
 - `nprocs` 上限默认取物理核数（本机 40），超过则警告。
 - 推荐 OpenMM 使用 CUDA 平台（占 1 个 CPU 线程）。若使用 CPU 平台，建议设置 `OPENMM_CPU_THREADS` 为小值，避免与 ORCA 抢核。

@@ -69,3 +69,23 @@ def tip4pew_system(topology: app.Topology, positions: np.ndarray):
         rigidWater=False,
     )
     return system, modeller.topology
+
+
+def remove_com_velocity(context: mm.Context) -> None:
+    """Zero the centre-of-mass momentum of the context's velocities.
+
+    ``setVelocitiesToTemperature`` leaves random COM motion in the velocities;
+    the CMMotionRemover from ``ForceField.createSystem`` then deletes that
+    kinetic energy on the first step, a spurious total-energy jump (~10 kJ/mol
+    for the 5-water cluster) that dominates NVE drift fits.
+    """
+    from openmm import unit
+
+    system = context.getSystem()
+    masses = np.array(
+        [system.getParticleMass(i).value_in_unit(unit.dalton) for i in range(system.getNumParticles())]
+    )
+    velocities = context.getState(getVelocities=True).getVelocities(asNumpy=True)
+    v = velocities.value_in_unit(unit.nanometer / unit.picosecond)
+    v -= (masses[:, None] * v).sum(axis=0) / masses.sum()
+    context.setVelocities(v * unit.nanometer / unit.picosecond)

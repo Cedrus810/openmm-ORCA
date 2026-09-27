@@ -93,14 +93,16 @@
 
 ## 里程碑与任务索引
 
-| 里程碑 | 任务 | 版本 |
-|---|---|---|
-| M0 后端冒烟 | Task 0–5 | — |
-| M1 OpenMM 层 + fake 后端 | Task 6–9 | — |
-| M2 非周期电子嵌入 | Task 10–11 | v0.1 |
-| M3 restart 与健壮性 | Task 12–15 | v0.2 |
-| M4 link atom | Task 16–18 | v0.3 |
-| M5 周期性 MM + 截断嵌入 | Task 19–22 | v0.4 |
+| 里程碑 | 任务 | 版本 | 状态 |
+|---|---|---|---|
+| M0 后端冒烟 | Task 0–5 | — | 完成 |
+| M1 OpenMM 层 + fake 后端 | Task 6–9 | — | 完成 |
+| M2 非周期电子嵌入 | Task 10–11 | v0.1 | 完成（2026-09-27） |
+| M3 restart 与健壮性 | Task 12–15 | v0.2 | 完成（2026-09-27），发布 0.2.0 |
+| M4 link atom | Task 16–18 | v0.3 | 未开始 |
+| M5 周期性 MM + 截断嵌入 | Task 19–22 | v0.4 | 未开始 |
+
+Task 14 的基准只测到 nprocs=32（本机 4 个物理核留给别的工作），结果见 spec §2.2.1。
 
 依赖关系：M0 与 M1 可以两人并行（M1 只依赖 Task 2 的协议）。M2 需要 M0 和 M1 都完成。M4、M5 需要 M3 完成；M5 的 Task 19–20 可与 M4 并行。
 
@@ -122,10 +124,10 @@
   - fixture `scratch_root(tmp_path)`：返回 `tmp_path / "scratch"`，供所有后端测试使用，避免写到 `/tmp/openmmorca-<user>`。
 
 **步骤：**
-- [ ] 创建上述三个文件
-- [ ] 在 openmm_dev 环境中可编辑安装：`/home/ruigengji/miniforge3/envs/openmm_dev/bin/python -m pip install -e /home/ruigengji/openmm-ORCA`
-- [ ] 运行 `python -c "import openmmorca; print(openmmorca.__version__)"`，期望输出 `0.0.1`
-- [ ] 运行 `pytest`，期望 "no tests ran"，退出码 5（pytest 没有收集到测试时的正常退出码）
+- [x] 创建上述三个文件
+- [x] 在 openmm_dev 环境中可编辑安装：`/home/ruigengji/miniforge3/envs/openmm_dev/bin/python -m pip install -e /home/ruigengji/openmm-ORCA`
+- [x] 运行 `python -c "import openmmorca; print(openmmorca.__version__)"`，期望输出 `0.0.1`
+- [x] 运行 `pytest`，期望 "no tests ran"，退出码 5（pytest 没有收集到测试时的正常退出码）
 
 **完成标准：** 可编辑安装成功；`pytest` 能启动。
 
@@ -166,9 +168,9 @@ errors.ORCATimeoutError(OpenMMORCAError)       # 超时
 | `test_error_hierarchy` | — | 三个具体异常都是 `OpenMMORCAError` 和 `RuntimeError` 的子类 |
 
 **步骤：**
-- [ ] 写 `tests/test_units.py`，运行 `pytest tests/test_units.py -v`，确认因 import 失败而 FAIL
-- [ ] 实现 `units.py`、`errors.py`
-- [ ] 运行 `pytest tests/test_units.py -v`，全部 PASS
+- [x] 写 `tests/test_units.py`，运行 `pytest tests/test_units.py -v`，确认因 import 失败而 FAIL
+- [x] 实现 `units.py`、`errors.py`
+- [x] 运行 `pytest tests/test_units.py -v`，全部 PASS
 
 **完成标准：** 5 个用例通过。
 
@@ -224,9 +226,9 @@ def check_result(request: QMRequest, result: QMResult) -> None   # 不匹配时�
 | `test_check_result_rejects_wrong_shape` | MM 力形状 (3,3)，但 `n_mm == 2` | `ValueError` |
 
 **步骤：**
-- [ ] 写测试，运行确认 FAIL
-- [ ] 实现 `base.py`
-- [ ] 运行 `pytest tests/test_backend_base.py -v`，全部 PASS
+- [x] 写测试，运行确认 FAIL
+- [x] 实现 `base.py`
+- [x] 运行 `pytest tests/test_backend_base.py -v`，全部 PASS
 
 **完成标准：** 8 个用例通过。M1 的同事从这里开始可以并行。
 
@@ -311,10 +313,10 @@ read_pcgrad(path: Path, n_charges: int) -> np.ndarray                  # (n_char
 | `test_write_pointcharges_count_mismatch` | 2 个电荷、3 个坐标 | `ValueError` |
 
 **步骤：**
-- [ ] 建立 `tests/data/` 下三个文件（内容逐字符照抄上文）
-- [ ] 写测试，运行确认 FAIL
-- [ ] 实现 `orca_files.py`
-- [ ] 运行 `pytest tests/test_orca_files.py -v`，全部 PASS
+- [x] 建立 `tests/data/` 下三个文件（内容逐字符照抄上文）
+- [x] 写测试，运行确认 FAIL
+- [x] 实现 `orca_files.py`
+- [x] 运行 `pytest tests/test_orca_files.py -v`，全部 PASS
 
 **完成标准：** 8 个用例通过。
 
@@ -414,11 +416,11 @@ class ORCAOPIBackend:                 # 实现 QMBackend 协议
 | `test_xtb_runs` | `method="XTB", basis=None`，带 2 个点电荷 | 返回有限的能量、QM 力和 MM 力 |
 
 **步骤：**
-- [ ] 写 `tests/test_scratch.py`，确认 FAIL；实现 `scratch.py`；确认 PASS
-- [ ] 写 `tests/test_orca_backend.py`，确认 FAIL
-- [ ] 实现 `ORCAConfig` 及其校验；确认两个不需要 ORCA 的配置用例 PASS
-- [ ] 实现 `ORCAOPIBackend`；设置 `export OPI_ORCA=/home/ruigengji/ORCA611` 后运行 `pytest tests/test_orca_backend.py -v -m orca`，全部 PASS
-- [ ] 如果 xTB 的 `scf_converged` 行为与假设不符，按实测修正实现，并更新 spec §2.6
+- [x] 写 `tests/test_scratch.py`，确认 FAIL；实现 `scratch.py`；确认 PASS
+- [x] 写 `tests/test_orca_backend.py`，确认 FAIL
+- [x] 实现 `ORCAConfig` 及其校验；确认两个不需要 ORCA 的配置用例 PASS
+- [x] 实现 `ORCAOPIBackend`；设置 `export OPI_ORCA=/home/ruigengji/ORCA611` 后运行 `pytest tests/test_orca_backend.py -v -m orca`，全部 PASS
+- [x] 如果 xTB 的 `scf_converged` 行为与假设不符，按实测修正实现，并更新 spec §2.6
 
 **完成标准：** 上述用例全部通过；scratch 目录在测试结束后没有残留（`failures/` 除外）。
 
@@ -443,8 +445,8 @@ class ORCAOPIBackend:                 # 实现 QMBackend 协议
 | `test_forces_sum_to_zero` | 带 2 个点电荷的一次计算 | ‖Σ F_QM + Σ F_MM‖ < 1e-3 × 所有原子中最大的 ‖F_i‖ |
 
 **步骤：**
-- [ ] 写测试并运行 `pytest tests/test_orca_fd.py -v`（约 30 次 ORCA 调用，耗时 30 秒左右）
-- [ ] 全部 PASS。如果失败，说明 Task 4 的单位或符号有错，回到 Task 4 修正，不要放宽阈值
+- [x] 写测试并运行 `pytest tests/test_orca_fd.py -v`（约 30 次 ORCA 调用，耗时 30 秒左右）
+- [x] 全部 PASS。如果失败，说明 Task 4 的单位或符号有错，回到 Task 4 修正，不要放宽阈值
 
 **完成标准：** 4 个用例通过。**M0 完成。**
 
@@ -485,7 +487,10 @@ class FakeBackend:                           # 实现 QMBackend 协议
 | `test_newton_third_law` | 任意几何下 ‖Σ F‖ < 1e-9 |
 | `test_charge_count_mismatch` | 给 2 个假电荷，但请求中有 3 个 QM 原子 → `ValueError` |
 
-**步骤：** 写测试 → 确认 FAIL → 实现 → 确认 PASS。
+**步骤：**
+- [x] 写测试，确认 FAIL
+- [x] 实现
+- [x] 运行测试，全部 PASS
 
 **完成标准：** 4 个用例通过。
 
@@ -557,11 +562,11 @@ build_mixed_system(topology, system, qm_atoms, remove_constraints=True) -> Mixed
 | `test_qm_order_preserved` | QM = [2, 0, 1] | `parts.qm_atoms == (2, 0, 1)`，`qm_elements` 顺序与之对应 |
 
 **步骤：**
-- [ ] 写 `tests/helpers.py`，并先用一个冒烟测试确认两个力场的 System 能正常创建
-- [ ] 写 `tests/test_qmmm_system.py`，确认 FAIL
-- [ ] 逐个实现 `system.py` 中的函数，每实现一个就跑一次对应用例
-- [ ] 实现 `build_mixed_system`
-- [ ] 运行 `pytest tests/test_qmmm_system.py -v`，全部 PASS
+- [x] 写 `tests/helpers.py`，并先用一个冒烟测试确认两个力场的 System 能正常创建
+- [x] 写 `tests/test_qmmm_system.py`，确认 FAIL
+- [x] 逐个实现 `system.py` 中的函数，每实现一个就跑一次对应用例
+- [x] 实现 `build_mixed_system`
+- [x] 运行 `pytest tests/test_qmmm_system.py -v`，全部 PASS
 
 **完成标准：** 16 个用例通过；全程不需要 ORCA。
 
@@ -602,7 +607,10 @@ def make_python_force(callback: QMMMCallback, force_group: int = 0) -> openmm.Py
 | `test_step_counter` | 调用 3 次 `getState(getForces=True)` | `callback.step == 3`，且 `backend.last_request.step == 2` |
 | `test_particle_count_mismatch` | 回调声明 6 个粒子，但 Context 中有 3 个 | 抛 `ValueError` |
 
-**步骤：** 写测试 → 确认 FAIL → 实现 → 确认 PASS。
+**步骤：**
+- [x] 写测试，确认 FAIL
+- [x] 实现
+- [x] 运行测试，全部 PASS
 
 **完成标准：** 6 个用例通过。
 
@@ -651,7 +659,10 @@ class ORCAPotential:
 | `test_config_errors_raised_at_construction` | `ORCAPotential("HF", extra_keywords=("Opt",))` 在构造时就抛 `ValueError` |
 | `test_close_closes_all_backends` | 用一个记录 close 调用的假后端：`close()` 后每个后端都被关闭 |
 
-**步骤：** 写测试 → 确认 FAIL → 实现 → 确认 PASS → 运行完整的 `pytest`（不带 `-m orca`），全部 PASS。
+**步骤：**
+- [x] 写测试，确认 FAIL
+- [x] 实现 `potential.py`，导出 `ORCAPotential`
+- [x] 运行完整的 `pytest`（不带 `-m orca`），全部 PASS
 
 **完成标准：** 7 个用例通过。**M1 完成。**
 
@@ -680,9 +691,9 @@ class ORCAPotential:
 `examples/full_qm_water.py`：1 个水，full-QM，HF/def2-SVP，Verlet 积分 0.5 fs，跑 20 步，打印每步的势能、动能、总能量，最后打印 `potential.backends[0].scratch.root`。
 
 **步骤：**
-- [ ] 写测试，运行 `pytest tests/test_potential_orca.py -v -m orca`
-- [ ] 失败时按"先用 fake 后端复现"的原则定位：fake 能复现就是 OpenMM 层的问题，不能复现就是 ORCA 后端的问题
-- [ ] 运行示例，确认总能量没有明显漂移
+- [x] 写测试，运行 `pytest tests/test_potential_orca.py -v -m orca`
+- [x] 失败时按"先用 fake 后端复现"的原则定位：fake 能复现就是 OpenMM 层的问题，不能复现就是 ORCA 后端的问题
+- [x] 运行示例，确认总能量没有明显漂移
 
 **完成标准：** 5 个用例通过；示例可以运行。
 
@@ -707,10 +718,10 @@ class ORCAPotential:
 | `test_nve_drift` | 漂移绝对值 < 0.1 kJ/mol/ps（spec §1.3 的目标值）；总能量的标准差 < 0.5 kJ/mol |
 
 **步骤：**
-- [ ] 先运行示例脚本，获得实测的漂移和标准差
-- [ ] 如果实测值远小于目标，就把阈值收紧到实测值的 3 倍；如果达不到目标，**不要放宽阈值**，先用 fake 后端跑同样的 NVE 排除 OpenMM 层问题，再检查 SCF 收敛阈值，并与负责人讨论
-- [ ] 把最终阈值写回 spec §1.3（去掉"目标值"字样）
-- [ ] 运行 `pytest tests/test_nve.py -v -m slow`
+- [x] 先运行示例脚本，获得实测的漂移和标准差
+- [x] 如果实测值远小于目标，就把阈值收紧到实测值的 3 倍；如果达不到目标，**不要放宽阈值**，先用 fake 后端跑同样的 NVE 排除 OpenMM 层问题，再检查 SCF 收敛阈值，并与负责人讨论
+- [x] 把最终阈值写回 spec §1.3（去掉"目标值"字样）
+- [x] 运行 `pytest tests/test_nve.py -v -m slow`
 
 **完成标准：** 测试通过，spec §1.3 已更新。**M2 完成，发布 v0.1。**
 
@@ -765,7 +776,10 @@ def write_failure_bundle(failures_dir: Path, step: int, current_dir: Path, qm_el
 | `test_failure_bundle_contents` | current 下有 qm.inp、qm.out、pc.pc：bundle 中有这三个文件，外加 geometry.xyz（第一行是原子数）和 metadata.json（可被 json 解析，含传入的字段） |
 | `test_failure_bundle_overwrites_same_step` | 同一个 step 写两次 bundle，不报错，且内容为第二次的 |
 
-**步骤：** 写测试 → 确认 FAIL → 实现 → 确认 PASS。
+**步骤：**
+- [x] 写测试，确认 FAIL
+- [x] 实现
+- [x] 运行测试，全部 PASS
 
 **完成标准：** 10 个用例通过。
 
@@ -814,7 +828,10 @@ class ORCAOPIBackend:
 | `test_forced_scf_failure_bundle` | 是 | `extra_blocks=("%scf maxiter 2 end",)`：抛 `ORCACalculationError`；bundle 中有 qm.inp 和 qm.out，且 qm.out 中含 "SCF NOT CONVERGED" |
 | `test_failed_run_does_not_clobber_last_good` | 是 | 先成功一步，记录 last_good 的字节数；再让下一步失败：last_good 的内容不变 |
 
-**步骤：** 先写不需要 ORCA 的用例 → 确认 FAIL → 实现状态机 → 确认 PASS → 写需要 ORCA 的用例 → 确认 PASS → 重新运行 Task 4、5、10 的全部测试。
+**步骤：**
+- [x] 写不需要 ORCA 的用例，确认 FAIL；实现状态机；确认 PASS
+- [x] 写需要 ORCA 的用例，确认 PASS
+- [x] 重新运行 Task 4、5、10 的全部测试，无回归
 
 **完成标准：** 9 个用例通过，已有测试无回归。
 
@@ -844,7 +861,9 @@ class ORCAOPIBackend:
 | `test_user_mpi_env_not_overridden` | 预先设置 `OMPI_MCA_btl=self,tcp`：monkeypatch runner，在其内部读取到的值仍为 `self,tcp` |
 | `test_nprocs2_is_not_pathologically_slow` | `nprocs=2` 一次 H2O 计算的墙钟时间 < 5 s（用来抓住 MCA 设置失效、退回约 10 s 的情况） |
 
-**步骤：** 写测试 → 确认 FAIL → 实现 → 确认 PASS → 在本机运行 `bench_nprocs.py`，把结果表格贴进 spec §2.2。
+**步骤：**
+- [x] 写测试，确认 FAIL；实现；确认 PASS
+- [x] 运行 `bench_nprocs.py`，结果表格贴进 spec §2.2.1（本机只测到 nprocs=32，原因见里程碑表下的说明）
 
 **完成标准：** 4 个用例通过；spec §2.2 中有 30–50 原子体系的 nprocs 实测表格。
 
@@ -868,7 +887,10 @@ class ORCAOPIBackend:
 | `test_restart_trajectory_reproducible` | Task 11 的团簇，restart 开和关各跑 50 步 NVE（相同初速度）：逐步势能差 < 1e-6 Eh |
 | `test_summarize_timings`（不需要 ORCA，用 fake 后端配合手工写入的 TimingLog） | 返回结构中含 `t_total` 的 mean、p50、p95 |
 
-**步骤：** 写测试 → 实现 → 运行完整测试 `pytest -m "orca or not orca"` 以及 `pytest -m slow` → 写 README。
+**步骤：**
+- [x] 写测试；实现 `summarize_timings`
+- [x] 运行完整测试 `pytest -m "orca or not orca"` 以及 `pytest -m slow`，全部 PASS
+- [x] 写 README
 
 **完成标准：** 用例通过；README 中的示例可以原样运行。**M3 完成，发布 v0.2。**
 

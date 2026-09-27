@@ -50,6 +50,22 @@ def build_cluster(n_waters: int = 5, spacing_nm: float = 0.3):
     return topology, system, positions
 
 
+def remove_com_velocity(context: mm.Context) -> None:
+    """Zero the COM momentum left by setVelocitiesToTemperature.
+
+    Otherwise the CMMotionRemover deletes that kinetic energy on the first
+    step, a spurious ~10 kJ/mol total-energy jump that dominates the drift fit.
+    """
+    system = context.getSystem()
+    masses = np.array(
+        [system.getParticleMass(i).value_in_unit(unit.dalton) for i in range(system.getNumParticles())]
+    )
+    v = context.getState(getVelocities=True).getVelocities(asNumpy=True)
+    v = v.value_in_unit(unit.nanometer / unit.picosecond)
+    v -= (masses[:, None] * v).sum(axis=0) / masses.sum()
+    context.setVelocities(v * unit.nanometer / unit.picosecond)
+
+
 def run_nve(n_steps: int = 4000, report_every: int = 10, csv_path: Path | None = None):
     from openmmorca.potential import ORCAPotential
 
@@ -67,6 +83,7 @@ def run_nve(n_steps: int = 4000, report_every: int = 10, csv_path: Path | None =
     context.setPositions(positions * unit.nanometer)
     mm.LocalEnergyMinimizer.minimize(context)
     context.setVelocitiesToTemperature(300 * unit.kelvin, 1234)
+    remove_com_velocity(context)
 
     samples: list[tuple[float, float, float]] = []  # (time_ps, pot, total)
     t_start = time.perf_counter()

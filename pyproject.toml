@@ -4,15 +4,27 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openmm-orca"
-version = "0.0.1"
+version = "0.2.0"
 description = "OpenMM-driven QM/MM with ORCA (via OPI) as the QM backend"
 readme = "README.md"
 requires-python = ">=3.10"
+keywords = ["OpenMM", "QM/MM", "ORCA", "molecular-dynamics", "computational-chemistry"]
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Chemistry",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
 dependencies = [
     "openmm>=8.5",
     "orca-pi>=2.0",
     "numpy",
 ]
+
+[project.optional-dependencies]
+test = ["pytest>=9"]
 
 [tool.setuptools.packages.find]
 include = ["openmmorca*"]

@@ -75,6 +75,31 @@ _MPI_ENV_NPROCS_GREATER_1 = {
 
 
 @contextlib.contextmanager
+def _preserve_os_environ():
+    """Wrap every OPI Runner call: restore the process environment afterwards.
+
+    OPI's ``_orca_environment`` decorator (on ``Runner.run``) ends with
+    ``os.environ = os.environ.copy()``. That leaves ``os.environ`` a plain
+    dict: later changes no longer reach child processes (so the MCA tuning of
+    the next parallel run never reaches ORCA, ~10 s per module), and what was
+    set in the real environment (PATH/LD_LIBRARY_PATH prepends, our MPI
+    variables) is never unset. Put the real mapping back and restore its
+    contents key by key; ``os._Environ`` calls putenv/unsetenv on each change.
+    """
+    real = os.environ
+    snapshot = dict(real)
+    try:
+        yield
+    finally:
+        os.environ = real
+        for key in [k for k in real if k not in snapshot]:
+            del real[key]
+        for key, value in snapshot.items():
+            if real.get(key) != value:
+                real[key] = value
+
+
+@contextlib.contextmanager
 def _orca_mpi_env(nprocs: int):
     """Temporarily set OMP/MPI variables while ORCA runs.
 
@@ -85,21 +110,11 @@ def _orca_mpi_env(nprocs: int):
     wanted = {"OMP_NUM_THREADS": "1"}
     if nprocs > 1:
         wanted.update(_MPI_ENV_NPROCS_GREATER_1)
-    saved: dict[str, str | None] = {}
-    for key, value in wanted.items():
-        current = os.environ.get(key)
-        if current:  # user-provided value wins
-            continue
-        saved[key] = current
-        os.environ[key] = value
-    try:
+    with _preserve_os_environ():
+        for key, value in wanted.items():
+            if not os.environ.get(key):  # user-provided value wins
+                os.environ[key] = value
         yield
-    finally:
-        for key, old in saved.items():
-            if old is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = old
 
 
 def _warn_on_unreasonable_config(config: ORCAConfig) -> None:
@@ -199,7 +214,8 @@ class ORCAOPIBackend:
         self._lock = threading.Lock()
         _warn_on_unreasonable_config(config)
         if check_version:
-            self._get_runner().check_version()
+            with _preserve_os_environ():
+                self._get_runner().check_version()
         # Remove the scratch tree when this object is garbage collected or at
         # interpreter exit, even if close() was never called.
         self._finalizer = weakref.finalize(self, self.scratch.cleanup)
