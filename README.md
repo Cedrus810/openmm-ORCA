@@ -4,6 +4,8 @@ OpenMM 驱动的 QM/MM：**OpenMM 负责 MD**（力场、积分器、温压控�
 
 设计规格：`openmm_orca_opi_design_plan.md`；实施计划：`docs/plans/2026-09-26-openmm-orca-implementation-plan.md`。
 
+**当前状态（v0.2.0）**：非周期体系的 full-QM / QM/MM（电子嵌入）、restart 与失败包诊断已可用（M0–M3）；link atom（v0.3）与周期性 MM + 截断嵌入（v0.4）在计划中。
+
 ## 安装
 
 ```bash
@@ -19,6 +21,16 @@ export OPI_MPI=/home/apps/openmpi/5.0.7_gcc13.3.0
 #   qsub -I -l select=1:ncpus=40   # 跑 40 核基准
 # 确实要超订时显式设 OMPI_MCA_rmaps_default_mapping_policy=:oversubscribe
 ```
+
+ORCA 装在 NFS 上时，NFS 一拥堵，每步的启动开销会成倍增加（本机实测 0.4 s → 3.5 s/步）。跑 MD 前先把 ORCA 复制到本地盘或 tmpfs（`autoci_*` 用不到，可以不复制），再让 `OPI_ORCA` 指向副本：
+
+```bash
+D=/dev/shm/orca611-$USER; mkdir -p $D
+cd /home/ruigengji/ORCA611 && cp -a lib datasets $D/ && ls | grep -v -e '^autoci_' -e '^lib$' -e '^datasets$' | xargs -I{} cp -a {} $D/
+export OPI_ORCA=$D
+```
+
+OpenMPI 的 `mpirun` 不理会 `taskset`，总是从 0 号核开始绑定。要把并行 ORCA 限定在指定核上（比如和别的任务共用机器时），设 `PRTE_MCA_hwloc_default_cpu_list=4-35`。
 
 ## 最小示例
 
@@ -98,6 +110,6 @@ $PY -m pytest -m slow -v         # NVE（约 25 分钟）、restart 重现性等
 
 没有 ORCA 时 `orca` 标记的测试自动跳过（注意：桌面 Linux 上 `/usr/bin/orca` 可能是屏幕阅读器，conftest 只认 ELF 二进制）。
 
-## 参考
+## 致谢
 
-- `openmm-pyscf`（只读参考，位于 `/home/ruigengji/openmm-pyscf`）：本项目的 OpenMM 侧逻辑移植自它，并修正了其键合项删除规则与 O(N²) exception 问题。
+- [openmm-pyscf](https://github.com/Gallicchio-Lab/openmm-pyscf)（Gallicchio Lab）：本项目的 OpenMM 侧逻辑移植自它，并修正了其键合项删除规则与 O(N²) exception 问题。感谢 Gallicchio Lab 的工作。

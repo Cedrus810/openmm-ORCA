@@ -33,6 +33,7 @@ def run_nve(n_steps: int = 4000, report_every: int = 10):
     context.setPositions(positions * unit.nanometer)
     mm.LocalEnergyMinimizer.minimize(context)
     context.setVelocitiesToTemperature(300 * unit.kelvin, 1234)
+    helpers.remove_com_velocity(context)
 
     times, totals = [], []
     for step in range(n_steps + 1):
@@ -56,5 +57,8 @@ def run_nve(n_steps: int = 4000, report_every: int = 10):
 @pytest.mark.slow
 def test_nve_drift():
     drift, scatter = run_nve()
-    assert abs(drift) < 0.1, f"NVE drift {drift:+.4f} kJ/mol/ps exceeds 0.1"
-    assert scatter < 0.5, f"NVE total-energy std dev {scatter:.4f} exceeds 0.5"
+    print(f"NVE drift {drift:+.4f} kJ/mol/ps, total-energy std dev {scatter:.4f} kJ/mol")
+    # Thresholds: ~3x the values measured on 2026-09-27 (drift +0.0056,
+    # std 0.0163; spec §1.3). The original spec target was 0.1 / 0.5.
+    assert abs(drift) < 0.017, f"NVE drift {drift:+.4f} kJ/mol/ps exceeds 0.017"
+    assert scatter < 0.05, f"NVE total-energy std dev {scatter:.4f} exceeds 0.05"

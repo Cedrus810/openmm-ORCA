@@ -42,10 +42,13 @@ def make_request(path: Path) -> QMRequest:
     )
 
 
-def time_nprocs(path: Path, method: str, nprocs: int, extra_keywords: tuple[str, ...]) -> float:
+def time_nprocs(
+    path: Path, method: str, basis: str | None, nprocs: int, extra_keywords: tuple[str, ...]
+) -> float:
     request = make_request(path)
     config = ORCAConfig(
         method=method,
+        basis=basis,
         extra_keywords=extra_keywords,
         nprocs=nprocs,
         restart=False,
@@ -75,7 +78,7 @@ def main() -> None:
     tokens = args.method.split()
     method = tokens[0]
     basis = tokens[1] if len(tokens) > 1 else None
-    extra_keywords = tuple(args.extra)
+    extra_keywords = tuple(tokens[2:]) + tuple(args.extra)
 
     n_atoms = int(open(args.xyz).readline())
     print(f"geometry : {args.xyz} ({n_atoms} atoms)")
@@ -83,7 +86,7 @@ def main() -> None:
     print(f"{'nprocs':>7} | {'median t (s)':>12}")
     print("-" * 24)
     for nprocs in [int(v) for v in args.nprocs.split(",")]:
-        median = time_nprocs(args.xyz, method, nprocs, extra_keywords)
+        median = time_nprocs(args.xyz, method, basis, nprocs, extra_keywords)
         print(f"{nprocs:>7} | {median:>12.2f}")
 
 

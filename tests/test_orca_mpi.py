@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
+import sys
+import textwrap
 import time
 from pathlib import Path
 
@@ -74,11 +77,11 @@ def make_request() -> QMRequest:
     )
 
 
-def make_backend(scratch_root, **overrides) -> ORCAOPIBackend:
+def make_backend(scratch_root, *, check_version=False, **overrides) -> ORCAOPIBackend:
     config = ORCAConfig(
         method="HF", basis="def2-SVP", scratch_root=str(scratch_root), **overrides
     )
-    return ORCAOPIBackend(config, check_version=False)
+    return ORCAOPIBackend(config, check_version=check_version)
 
 
 @pytest.mark.orca
@@ -125,10 +128,82 @@ def test_user_mpi_env_not_overridden(scratch_root, require_mpi, monkeypatch):
 
 @pytest.mark.orca
 def test_nprocs2_is_not_pathologically_slow(scratch_root, require_mpi):
-    backend = make_backend(scratch_root, nprocs=2)
+    # A serial ORCA run first: OPI's Runner used to leave os.environ as a plain
+    # dict, after which the MCA tuning of later parallel runs never reached ORCA.
+    serial = make_backend(scratch_root / "serial", nprocs=1)
+    serial.evaluate(make_request())
+    serial.close()
+    backend = make_backend(scratch_root / "parallel", nprocs=2)
     backend.evaluate(make_request())  # warm-up (first run pays one-time costs)
     t0 = time.perf_counter()
     backend.evaluate(make_request())
     wall = time.perf_counter() - t0
     assert wall < 5.0, f"nprocs=2 took {wall:.1f} s — MCA tuning likely ineffective"
     backend.close()
+
+
+# ---------------------------------------------------------------------------
+# Process environment seen by child processes (OPI Runner side effects).
+#
+# OPI's Runner wraps every call in ``_orca_environment``, whose ``finally``
+# does ``os.environ = os.environ.copy()``. Checking ``os.environ`` itself is
+# therefore not enough: these tests look at what a child process inherits,
+# each in a fresh interpreter so earlier tests cannot mask the problem.
+# ---------------------------------------------------------------------------
+
+_FRESH_PRELUDE = """
+import json, os, subprocess, sys
+sys.path.insert(0, {tests_dir!r})
+from test_orca_mpi import make_backend, make_request
+from pathlib import Path
+
+def child_env():
+    out = subprocess.run(["env", "-0"], capture_output=True, check=True).stdout
+    return dict(item.split("=", 1) for item in out.decode().split("\\0") if item)
+"""
+
+
+def _run_fresh(body: str) -> dict:
+    """Run *body* in a new interpreter; it must print one JSON object last."""
+    code = _FRESH_PRELUDE.format(tests_dir=str(Path(__file__).parent)) + textwrap.dedent(body)
+    proc = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, timeout=300
+    )
+    assert proc.returncode == 0, proc.stderr
+    return json.loads(proc.stdout.strip().splitlines()[-1])
+
+
+@pytest.mark.orca
+def test_os_environ_changes_reach_children_after_backend_use(scratch_root):
+    result = _run_fresh(f"""
+        backend = make_backend(Path({str(scratch_root)!r}), nprocs=1, check_version=True)
+        backend.evaluate(make_request())
+        os.environ["OPENMMORCA_PROBE"] = "visible"
+        print(json.dumps({{"probe": child_env().get("OPENMMORCA_PROBE")}}))
+    """)
+    assert result["probe"] == "visible"
+
+
+@pytest.mark.orca
+def test_orca_run_leaves_child_environment_unchanged(scratch_root, require_mpi):
+    result = _run_fresh(f"""
+        before = child_env()
+        backend = make_backend(Path({str(scratch_root)!r}), nprocs=2)
+        backend.evaluate(make_request())
+        after = child_env()
+        changed = sorted(k for k in set(before) | set(after) if before.get(k) != after.get(k))
+        print(json.dumps({{"changed": changed}}))
+    """)
+    assert result["changed"] == []
+
+
+@pytest.mark.orca
+def test_check_version_leaves_child_environment_unchanged(scratch_root):
+    result = _run_fresh(f"""
+        before = child_env()
+        backend = make_backend(Path({str(scratch_root)!r}), nprocs=1, check_version=True)
+        after = child_env()
+        changed = sorted(k for k in set(before) | set(after) if before.get(k) != after.get(k))
+        print(json.dumps({{"changed": changed}}))
+    """)
+    assert result["changed"] == []
