@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openmm-orca"
-version = "0.2.0"
-description = "OpenMM-driven QM/MM with ORCA (via OPI) as the QM backend"
+version = "0.2.1"
+description = "OpenMM-driven QM/MM and ONIOM with ORCA (via OPI) as the QM backend"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
-keywords = ["OpenMM", "QM/MM", "ORCA", "molecular-dynamics", "computational-chemistry"]
+keywords = ["OpenMM", "QM/MM", "ONIOM", "ORCA", "molecular-dynamics", "computational-chemistry"]
 classifiers = [
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering :: Chemistry",

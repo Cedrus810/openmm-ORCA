@@ -4,9 +4,9 @@ English | [简体中文](README.zh-CN.md)
 
 OpenMM-driven QM/MM: **OpenMM runs the MD** (force field, integrator, thermostat/barostat, trajectories) while **ORCA computes the QM region** (electronic structure + electrostatic-embedding gradients), with OPI (ORCA Python Interface) handling ORCA input/output. The interface style follows `openmm-ml` / `openmm-pyscf`.
 
-Design spec: `openmm_orca_opi_design_plan.md`; implementation plan: `docs/plans/2026-09-26-openmm-orca-implementation-plan.md` (both in Chinese).
+Design spec: `openmm_orca_opi_design_plan.md`; implementation plan: `docs/plans/2026-09-26-openmm-orca-implementation-plan.md`; ONIOM plan: `docs/plans/2026-09-28-oniom.md` (all in Chinese).
 
-**Current status (v0.2.0):** full-QM and QM/MM (electronic embedding) for non-periodic systems, plus restart and failure-bundle diagnostics, are working (M0–M3). Link atoms (v0.3) and periodic MM + cutoff embedding (v0.4) are planned.
+**Current status (v0.2.1):** full-QM, QM/MM (electronic embedding) and two-layer ONIOM (QM:QM) for non-periodic systems, plus restart and failure-bundle diagnostics, are working (M0–M3 + ONIOM). Link atoms (v0.3) and periodic MM + cutoff embedding (v0.4) are planned.
 
 ## Installation
 
@@ -52,7 +52,21 @@ potential = ORCAPotential(method="HF", basis="def2-SVP", extra_keywords=("TightS
 mixed = potential.createMixedSystem(topology, system, atoms=[0, 1, 2], forceGroup=0)
 ```
 
-QM/MM water-cluster NVE (1 ps, energy-conservation check): `examples/qmmm_water_cluster_nve.py`.
+ONIOM (two-layer subtractive QM:QM; here HF/STO-3G on water 0, xTB on all 5 waters — see `examples/oniom_water_cluster.py`):
+
+```python
+from openmmorca import ONIOMPotential, ORCAPotential
+
+oniom = ONIOMPotential(
+    high=ORCAPotential(method="HF", basis="STO-3G", extra_keywords=("TightSCF",)),  # model region
+    low=ORCAPotential(method="XTB"),                                                # full system
+)
+system = oniom.createONIOMSystem(topology, atoms=[0, 1, 2], forceGroup=0)
+```
+
+The energy is the standard subtractive combination `E_high(model) + E_low(full) − E_low(model)`; layers couple mechanically (no point-charge embedding between QM layers), the model region must be whole molecules, and the System carries no force-field terms. Each step costs three QM evaluations (one high, two low) through three independent backends, so every restart chain stays correctly sized. `high`'s charge/multiplicity describe the model region, `low`'s the full system (the low-layer-only atoms must carry zero net charge). Every `createONIOMSystem` call creates those three backends; `oniom.summarize_timings()` / `oniom.close()` aggregate over both layers.
+
+QM/MM water-cluster NVE (1 ps, energy-conservation check): `examples/qmmm_water_cluster_nve.py`; ONIOM counterpart: `examples/oniom_water_cluster.py`.
 
 ## Parameters (`ORCAPotential.__init__`)
 
@@ -73,7 +87,7 @@ QM/MM water-cluster NVE (1 ps, energy-conservation check): `examples/qmmm_water_
 | `orca_path` | `None` | by default reads `OPI_ORCA` or `PATH` |
 | `backend_factory` | `None` | inject a custom backend (for tests) |
 
-**Every `createSystem` / `createMixedSystem` call creates a fresh backend instance with its own scratch directory**; one backend serves exactly one Context.
+**Every `createSystem` / `createMixedSystem` / `createONIOMSystem` call creates fresh backend instance(s) with their own scratch directory**; one backend serves exactly one Context.
 
 ## Scratch directory and failure bundles
 
@@ -95,7 +109,7 @@ cd <scratch>/failures/failure_step_000123 && $OPI_ORCA/orca qm.inp > rerun.out
 
 ## Known limitations (before v0.4)
 
-- Non-periodic systems, whole molecules as the QM region (periodic + cutoff embedding planned for M5); QM/MM boundaries needing link atoms arrive in M4.
+- Non-periodic systems, whole molecules as the QM/ONIOM model region (periodic + cutoff embedding planned for M5); QM/MM boundaries needing link atoms arrive in M4. ONIOM layers couple mechanically (no embedding between QM layers) and the low-layer-only atoms must carry zero net charge.
 - Systems containing the PythonForce cannot be XML-serialized (the callback holds a lock and a temp directory).
 - Every step pays a fixed process-startup overhead (≈0.4 s serial); not negligible for small QM regions.
 - Embedding charges go through a `%pointcharges` file; inline `Q` is forbidden (it double-counts MM–MM electrostatics and yields no pcgrad).

@@ -124,9 +124,11 @@ class QMMMCallback:
         return float(result.energy_kj_mol), forces
 
 
-def make_python_force(callback: QMMMCallback, force_group: int = 0) -> mm.PythonForce:
+def make_python_force(
+    callback: QMMMCallback, force_group: int = 0, name: str = "ORCA QM/MM"
+) -> mm.PythonForce:
     """Wrap *callback* in an OpenMM PythonForce with the given force group."""
     force = mm.PythonForce(callback)
     force.setForceGroup(force_group)
-    force.setName("ORCA QM/MM")
+    force.setName(name)
     return force
