@@ -4,9 +4,9 @@
 
 OpenMM 驱动的 QM/MM：**OpenMM 负责 MD**（力场、积分器、温压控、轨迹），**ORCA 计算 QM 区**（电子结构 + 静电嵌入梯度），OPI（ORCA Python Interface）负责 ORCA 输入输出。接口风格与 `openmm-ml` / `openmm-pyscf` 一致。
 
-设计规格：`openmm_orca_opi_design_plan.md`；实施计划：`docs/plans/2026-09-26-openmm-orca-implementation-plan.md`。
+设计规格：`openmm_orca_opi_design_plan.md`；实施计划：`docs/plans/2026-09-26-openmm-orca-implementation-plan.md`；ONIOM 计划：`docs/plans/2026-09-28-oniom.md`。
 
-**当前状态（v0.2.0）**：非周期体系的 full-QM / QM/MM（电子嵌入）、restart 与失败包诊断已可用（M0–M3）；link atom（v0.3）与周期性 MM + 截断嵌入（v0.4）在计划中。
+**当前状态（v0.2.1）**：非周期体系的 full-QM / QM/MM（电子嵌入）/ 双层 ONIOM（QM:QM）、restart 与失败包诊断已可用（M0–M3 + ONIOM）；link atom（v0.3）与周期性 MM + 截断嵌入（v0.4）在计划中。
 
 ## 安装
 
@@ -52,7 +52,21 @@ potential = ORCAPotential(method="HF", basis="def2-SVP", extra_keywords=("TightS
 mixed = potential.createMixedSystem(topology, system, atoms=[0, 1, 2], forceGroup=0)
 ```
 
-QM/MM 团簇 NVE（1 ps，验证能量守恒）：`examples/qmmm_water_cluster_nve.py`。
+ONIOM（双层减法 QM:QM；这里水 0 用 HF/STO-3G，5 个水全部用 xTB——见 `examples/oniom_water_cluster.py`）：
+
+```python
+from openmmorca import ONIOMPotential, ORCAPotential
+
+oniom = ONIOMPotential(
+    high=ORCAPotential(method="HF", basis="STO-3G", extra_keywords=("TightSCF",)),  # model 区
+    low=ORCAPotential(method="XTB"),                                                # 全体系
+)
+system = oniom.createONIOMSystem(topology, atoms=[0, 1, 2], forceGroup=0)
+```
+
+能量是标准减法组合 `E_high(model) + E_low(full) − E_low(model)`；层间机械耦合（QM 层之间不加点电荷嵌入）、model 区必须整分子、System 不含力场项。每步 3 次 QM 调用（1 高 2 低），走 3 个独立 backend，各 restart 链尺寸自洽。`high` 的 charge/multiplicity 描述 model 区，`low` 的描述全体系（low-only 原子的净电荷必须为 0）。每次 `createONIOMSystem` 都会新建这 3 个 backend；`oniom.summarize_timings()` / `oniom.close()` 汇总两层。
+
+QM/MM 团簇 NVE（1 ps，验证能量守恒）：`examples/qmmm_water_cluster_nve.py`；ONIOM 对应版本：`examples/oniom_water_cluster.py`。
 
 ## 参数（`ORCAPotential.__init__`）
 
@@ -73,7 +87,7 @@ QM/MM 团簇 NVE（1 ps，验证能量守恒）：`examples/qmmm_water_cluster_n
 | `orca_path` | `None` | 默认读 `OPI_ORCA` 或 PATH |
 | `backend_factory` | `None` | 注入自定义后端（测试用） |
 
-**每次 `createSystem` / `createMixedSystem` 都会新建一个后端实例和独立 scratch 目录**；一个后端只服务一个 Context。
+**每次 `createSystem` / `createMixedSystem` / `createONIOMSystem` 都会新建后端实例（ONIOM 为 3 个）和独立 scratch 目录**；一个后端只服务一个 Context。
 
 ## scratch 目录与失败包
 
@@ -95,7 +109,7 @@ cd <scratch>/failures/failure_step_000123 && $OPI_ORCA/orca qm.inp > rerun.out
 
 ## 已知限制（v0.4 前）
 
-- 非周期体系、整分子 QM（周期性 + 截断嵌入在 M5）；QM/MM 边界需要 link atom 时在 M4。
+- 非周期体系、整分子 QM / ONIOM model 区（周期性 + 截断嵌入在 M5）；QM/MM 边界需要 link atom 时在 M4。ONIOM 层间机械耦合（不带嵌入），且 low-only 原子净电荷必须为 0。
 - 包含 PythonForce 的 System 不能 XML 序列化（回调持有锁与临时目录）。
 - 每步有进程启动固定开销（串行 ≈0.4 s）；QM 区很小时这不可忽略。
 - 嵌入电荷走 `%pointcharges` 文件；禁止 inline `Q`（会重复计算 MM–MM 静电且无 pcgrad）。

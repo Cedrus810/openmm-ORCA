@@ -19,6 +19,28 @@ from openmmorca.force import QMMMCallback, make_python_force
 from openmmorca.qmmm import build_mixed_system
 
 
+def topology_masses(topology: openmm.app.Topology) -> list[float]:
+    """Particle masses (dalton, plain floats) for every topology atom.
+
+    Rejects atoms without an element (virtual sites): full-QM and ONIOM
+    particles must be real atoms.
+    """
+    masses = []
+    for atom in topology.atoms():
+        if atom.element is None:
+            raise ValueError(
+                f"atom {atom.name} (index {atom.index}) has no element; "
+                "full-QM systems require real atoms"
+            )
+        mass = atom.element.mass
+        masses.append(
+            float(mass.value_in_unit(unit.dalton))
+            if hasattr(mass, "value_in_unit")
+            else float(mass)
+        )
+    return masses
+
+
 class ORCAPotential:
     """OpenMM potential backed by ORCA via OPI.
 
@@ -79,19 +101,9 @@ class ORCAPotential:
     ) -> mm.System:
         """Build a full-QM System: every topology atom becomes a QM particle."""
         backend = self._create_backend()
-        atoms = list(topology.atoms())
-        elements = []
-        masses = []
-        for atom in atoms:
-            if atom.element is None:
-                raise ValueError(
-                    f"atom {atom.name} (index {atom.index}) has no element; "
-                    "full-QM systems require real atoms"
-                )
-            elements.append(atom.element.symbol)
-            mass = atom.element.mass
-            masses.append(float(mass.value_in_unit(unit.dalton)) if hasattr(mass, "value_in_unit") else float(mass))
-        n_particles = len(atoms)
+        masses = topology_masses(topology)
+        elements = [atom.element.symbol for atom in topology.atoms()]
+        n_particles = len(masses)
         callback = QMMMCallback(backend, range(n_particles), elements, n_particles)
         system = mm.System()
         for mass in masses:

@@ -34,6 +34,20 @@ SUPPORTED_FORCE_TYPES: tuple[type, ...] = (
 _ZERO_CHARGE_TOL = 1e-12
 
 
+def validate_atom_indices(atoms, n_particles: int, name: str = "qm_atoms") -> list[int]:
+    """Validate a particle selection (non-empty, unique, in range); return it as ``list[int]``."""
+    atoms = [int(i) for i in atoms]
+    if len(atoms) == 0:
+        raise ValueError(f"{name} must not be empty")
+    if len(set(atoms)) != len(atoms):
+        raise ValueError(f"{name} contains duplicates: {atoms}")
+    if any(i < 0 or i >= n_particles for i in atoms):
+        raise ValueError(
+            f"{name} indices must be in [0, {n_particles}), got {atoms}"
+        )
+    return atoms
+
+
 def copy_system(system: mm.System) -> mm.System:
     """Deep-copy a System via an XML round trip."""
     return mm.XmlSerializer.deserialize(mm.XmlSerializer.serialize(system))
@@ -232,17 +246,8 @@ def build_mixed_system(
     remove_constraints: bool = True,
 ) -> MixedSystemParts:
     """Copy and modify *system* for QM/MM (spec §6, Task 7 ordering)."""
-    qm_atoms = list(qm_atoms)
     n_particles = system.getNumParticles()
-    if len(qm_atoms) == 0:
-        raise ValueError("qm_atoms must not be empty")
-    if len(set(qm_atoms)) != len(qm_atoms):
-        raise ValueError(f"qm_atoms contains duplicates: {qm_atoms}")
-    if any(i < 0 or i >= n_particles for i in qm_atoms):
-        raise ValueError(
-            f"qm_atoms indices must be in [0, {n_particles}), got {qm_atoms}"
-        )
-
+    qm_atoms = validate_atom_indices(qm_atoms, n_particles)
     if system.usesPeriodicBoundaryConditions():
         raise NotImplementedError(
             "periodic QM/MM is planned for M5; this build supports non-periodic systems only"
