@@ -1,4 +1,4 @@
-__version__ = "0.2.1"
+__version__ = "0.4.0"
 
 from openmmorca.oniom import ONIOMPotential
 from openmmorca.potential import ORCAPotential

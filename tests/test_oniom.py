@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 import openmm as mm
+import openmm.app as app
 import pytest
 from openmm import unit
 
@@ -294,6 +295,65 @@ def test_summarize_timings(tmp_path):
     oniom.close()
 
 
+def test_model_low_backend_uses_model_charge_and_multiplicity(monkeypatch):
+    """E_low(model) is a model-region calculation: it takes high's charge/multiplicity.
+
+    The low level's own charge/multiplicity describe the full system; applying
+    them to the model region would silently give a wrong E_low(model) whenever
+    the low-layer-only atoms are charged or open-shell.
+    """
+    import openmmorca.potential as potential_module
+
+    class RecordingBackend(FlexibleFake):
+        def __init__(self, config) -> None:
+            super().__init__()
+            self.config = config
+
+    monkeypatch.setattr(potential_module, "ORCAOPIBackend", RecordingBackend)
+    high = ORCAPotential("HF", basis="STO-3G", charge=0, multiplicity=1)
+    low = ORCAPotential("XTB", charge=2, multiplicity=3, nprocs=2)
+    oniom = ONIOMPotential(high=high, low=low)
+    oniom.createONIOMSystem(helpers.water_topology(2), [0, 1, 2])
+
+    high_backend, low_full, low_model = layer_backends(oniom)
+    assert high_backend.config == high.config
+    assert low_full.config == low.config
+    assert low_model.config.method == "XTB"
+    assert low_model.config.nprocs == 2  # every other low option is kept
+    assert (low_model.config.charge, low_model.config.multiplicity) == (0, 1)
+    assert low.config.charge == 2  # the low potential itself is untouched
+    oniom.close()
+
+
+def test_bondless_topology_warns():
+    """Without bonds the whole-molecule check cannot see a cut molecule."""
+    topology = helpers.water_topology(2)
+    bondless = type(topology)()
+    chain = bondless.addChain()
+    for residue in topology.residues():
+        new_residue = bondless.addResidue(residue.name, chain)
+        for atom in residue.atoms():
+            bondless.addAtom(atom.name, atom.element, new_residue)
+    high = ORCAPotential("HF", basis="def2-SVP", backend_factory=FlexibleFake)
+    low = ORCAPotential("XTB", backend_factory=FlexibleFake)
+    oniom = ONIOMPotential(high=high, low=low)
+    with pytest.warns(UserWarning, match="topology has no bonds"):
+        oniom.createONIOMSystem(bondless, [0, 1, 2])
+    oniom.close()
+
+
+def test_same_potential_for_both_layers_summarized_once():
+    potential = ORCAPotential("XTB", backend_factory=FlexibleFake)
+    oniom = ONIOMPotential(high=potential, low=potential)
+    oniom.createONIOMSystem(helpers.water_topology(2), [0, 1, 2])
+    assert len(potential.backends) == 3
+    calls = []
+    potential.summarize_timings = lambda: calls.append(1) or [{"scratch": "x"}]
+    assert oniom.summarize_timings() == [{"scratch": "x"}]
+    assert len(calls) == 1
+    oniom.close()
+
+
 # ---------------------------------------------------------------------------
 # Real-ORCA tests (marked "orca", skipped automatically without OPI_ORCA)
 # ---------------------------------------------------------------------------
@@ -360,6 +420,12 @@ def test_orca_oniom_heterogeneous_levels_two_steps():
         assert np.linalg.norm(forces.sum(axis=0)) < 1e-6
 
     high, low_full, low_model = layer_backends(oniom)
+    # All three restart chains were exercised: step 2 of every backend started
+    # from its own last-good wavefunction (MORead) without a fresh retry.
+    for backend in (high, low_full, low_model):
+        assert [row["restart_used"] for row in backend.timings.rows] == [False, True]
+        assert backend.restart_state.last_good.is_file()
+    assert high.n_fresh_retries + low_full.n_fresh_retries + low_model.n_fresh_retries == 0
     # Step-2 energy matches a manual recombination at the same geometry.
     elements = tuple(atom.element.symbol for atom in topology.atoms())
     request_full = QMRequest(elements, positions)
@@ -370,6 +436,53 @@ def test_orca_oniom_heterogeneous_levels_two_steps():
         - low_model.evaluate(request_model).energy_kj_mol
     )
     assert energies[-1] == pytest.approx(manual, abs=0.05)
-    # Three restart chains were exercised (one MORead guess per backend).
-    assert high.n_fresh_retries + low_full.n_fresh_retries + low_model.n_fresh_retries == 0
     oniom.close()
+
+
+def ion_water_topology():
+    """Two waters plus a Na+ ion (a charged low-layer-only particle)."""
+    topology = helpers.water_topology(2)
+    residue = topology.addResidue("NA", next(topology.chains()))
+    topology.addAtom("NA", app.element.sodium, residue)
+    return topology
+
+
+def ion_water_positions():
+    positions = helpers.water_positions(2) + np.array([0.004, -0.003, 0.002])
+    return np.vstack([positions, [0.3, 0.25, 0.0]])
+
+
+@pytest.mark.orca
+def test_orca_oniom_identity_with_charged_low_only_region():
+    """Neutral model water, Na+ outside it: the identity check still holds.
+
+    high (charge 0) and low (charge +1) share the level of theory, so E_ONIOM
+    must equal the full-system result at charge +1. Before the model-low
+    backend took the model charge this ran H2O at charge +1 (and the backend's
+    electron-count check rejected the 9-electron singlet).
+    """
+    topology = ion_water_topology()
+    positions = ion_water_positions()
+    config = dict(method="HF", basis="STO-3G", extra_keywords=("TightSCF",))
+    oniom = ONIOMPotential(
+        high=ORCAPotential(**config, charge=0), low=ORCAPotential(**config, charge=1)
+    )
+    oniom_system = oniom.createONIOMSystem(topology, [0, 1, 2])
+    reference_potential = ORCAPotential(**config, charge=1)
+    reference_system = reference_potential.createSystem(topology)
+
+    states = []
+    for system in (oniom_system, reference_system):
+        context = make_context(system, positions)
+        states.append(context.getState(getEnergy=True, getForces=True))
+    energies = [
+        s.getPotentialEnergy().value_in_unit(unit.kilojoule_per_mole) for s in states
+    ]
+    forces = [
+        s.getForces(asNumpy=True).value_in_unit(unit.kilojoule_per_mole / unit.nanometer)
+        for s in states
+    ]
+    assert energies[0] == pytest.approx(energies[1], abs=0.05)
+    np.testing.assert_allclose(forces[0], forces[1], atol=0.5)
+    oniom.close()
+    reference_potential.close()

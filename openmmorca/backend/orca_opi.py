@@ -519,6 +519,8 @@ class ORCAOPIBackend:
                 "scf_cycles": step_output.scf_cycles,
                 "restart_used": restart_used,
                 "fresh_retries": self.n_fresh_retries,
+                "n_embed_groups": request.diagnostics.get("n_embed_groups", 0),
+                "embed_changed": request.diagnostics.get("embed_changed", 0),
             }
         )
 

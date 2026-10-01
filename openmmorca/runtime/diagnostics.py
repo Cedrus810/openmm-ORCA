@@ -18,6 +18,8 @@ TIMING_FIELDS = (
     "scf_cycles",
     "restart_used",
     "fresh_retries",
+    "n_embed_groups",  # periodic cutoff embedding: groups embedded this step
+    "embed_changed",  # groups that entered or left since the previous step
 )
 
 BUNDLE_FILES = (

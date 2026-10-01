@@ -60,8 +60,8 @@
 |---|---|
 | v0.1（C 完成） | 有限差分：QM 原子力与点电荷力分量误差 < 1e-4 Eh/bohr（HF/def2-SVP，TightSCF）；非周期体系总力 ‖ΣF‖ < 1e-3 × max‖F_i‖；QM 水 + MM 水团簇 NVE 1 ps（0.25 fs 步长，HF/STO-3G TightSCF）：总能量漂移 < 0.017 kJ/mol/ps，总能量标准差 < 0.05 kJ/mol（2026-09-27 实测 +0.0056 kJ/mol/ps、0.0163 kJ/mol，阈值取约 3 倍；原目标 0.1 / 0.5）。初速度必须去掉质心平动：`setVelocitiesToTemperature` 生成的速度带质心运动，`ForceField.createSystem` 默认加的 `CMMotionRemover` 会在第一步把这部分动能（本团簇约 10.7 kJ/mol）直接删掉，造成一个假的能量跳变，未处理时拟合出的漂移为 −0.153 kJ/mol/ps、标准差 0.53 kJ/mol |
 | v0.2 | 连续 1000 步无人工干预；restart 与非 restart 轨迹前 50 步逐步能量差 < 1e-6 Eh（两条轨迹必须从同一个初始状态出发：各自做能量最小化时，SCF 初猜不同带来的约 1e-9 Eh 噪声会让 L-BFGS 走不同路径，实测第 0 步就差 9e-5 Eh；2026-09-27 通过）；故意制造 SCF 失败时正确重试/报错并生成失败包 |
-| v0.3 | 带共价边界的小体系（例：乙醇 QM 取 C–OH 端，另一端 MM）有限差分通过，力正确回分到 Q1/M1 |
-| v0.4 | 溶剂化酶体系（PBC + PME）在 NVT 下稳定运行 ≥ 1 ps，每步耗时分解有记录 |
+| v0.3 | 带共价边界的小体系（ACE-ALA-NME 二肽，QM = ALA 甲基侧链，边界 CB–CA）有限差分通过，力正确回分到 Q1/M1（2026-09-29 通过：HF/def2-SVP，Q1/M1/M2 有限差分误差 ≤ 0.042 kJ/mol/nm） |
+| v0.4 | 溶剂化酶体系（PBC + PME）在 NVT 下稳定运行 ≥ 1 ps，每步耗时分解有记录（2026-10-01 通过：DhlA 2DHC，r2SCAN-3c，1 ps，最后 500 步 298.6 ± 1.1 K，见 §2.2.2 与 §15） |
 
 ---
 
@@ -126,6 +126,20 @@
 | 32 | 7.5 | 8.0 | 11.5 | 8.6 |
 
 结论：对 36 原子体系，8 核以内接近线性，16 核之后收益明显变小（16→32 核只快约 1.3 倍）。几十原子的 QM 区用 8–16 核比较划算，剩余的核可以同时跑别的任务。
+
+### 2.2.2 酶体系 QM/MM 单步耗时（Task 22，2026-10-01）
+
+DhlA 方案 A（15 个 QM 原子含 1 个 link H，1.2 nm 截断内约 1,800 个嵌入点电荷），每步 ORCA 时间：
+
+| 方法 | 核数 | ORCA 每步 |
+|---|---|---|
+| GFN2-xTB | 1 | 0.21 s |
+| HF-3c | 1 | 3.0 s |
+| HF/def2-SVP | 1 | 15.4 s |
+| r2SCAN-3c | 1 / 16 / 32 / 40 | 17.9 / 5.4 / 4.8 / 5.45 s |
+| B3LYP-D3BJ/def2-SVP | 1 | 34.6 s |
+
+结论：QM 区小而点电荷多时，开销主要在点电荷积分与 pcgrad，不在 QM 原子数；r2SCAN-3c 在 16 核以后几乎不再加速（40 核的 1 ps 正式跑实测 5.45 s，与 32 核的短测相当）。OpenMM 侧（CUDA 上的 MM、回调中的镜像与选组）每步约 0.1 s。
 
 ### 2.3 点电荷：必须用 `%pointcharges` 文件，不能用 inline `Q`
 
@@ -611,6 +625,12 @@ M2 上叠加了额外电荷，因此 pcgrad 给出的 M2 的梯度已包含这�
 
 以后可扩展 RCD（redistributed charge and dipole）等方案；`charges.py` 中以策略对象实现，v0.3 只提供 `ChargeShift`。
 
+注意这是**简化版** charge shift：文献中的方案（Sherwood 等，ChemShell）还在 M2 附近加一对点电荷以补偿 M1–M2 键偶极，本版不加。docstring 与 README 必须写明。
+
+QM 区取自力场残基的一部分时，QM 原子的 MM 电荷之和一般不是整数（例：ALA 的 CA、HA、CB、HB1–3 为 +0.1144 e），嵌入电荷整体因此带非整数净电荷；charge shift 不解决这个问题。v0.3 只在 |Σq − round(Σq)| > 0.05 e 时警告。
+
+**M5 起（2026-10-01，prep D3）改为修正**：对每个被切开的残基 r，取其 QM 部分的力场电荷 x_r，把 δ_r = x_r − round(x_r) 平均加到 r 自己的 M2 原子上（r 中没有 M2 时加到 r 其余非 M1 的 MM 原子上），使每个被切开残基的 MM 剩余部分为整数电荷，嵌入总电荷也为整数。修正是局部的，与用户给的 QM 电荷无关；|δ_r| > 0.25（接近半整数，取整有歧义）或 Σ round(x_r) ≠ 用户 `charge` 时警告。DhlA 方案 A：Asp124 侧链 x = −0.858 → Asp 的 M2（N、HA、C）共加 +0.142 e。
+
 ### 10.5 与 §6 的交互
 
 - 键合项：按 §6.3 规则，Q1–M1 相关项保留。
@@ -643,6 +663,13 @@ M2 上叠加了额外电荷，因此 pcgrad 给出的 M2 的梯度已包含这�
 ### 11.4 PythonForce 设置
 
 M5 中回调需要盒向量：`PythonForce.setUsesPeriodicBoundaryConditions(True)`，从 `state.getPeriodicBoxVectors()` 读取。非周期体系保持 False。
+
+实测（2026-09-29，OpenMM 8.5.2）：
+
+- 回调收到的坐标**不做包裹**（Reference/CPU/CUDA 相同）。§11.2 的拼接主要防输入结构按原子包裹；拼接必须把边界 M1 一起放到 Q1 的镜像里，否则 link atom 位置出错。
+- `MonteCarloBarostat` 每次尝试额外触发 **2 次** PythonForce 调用，NPT 下 QM 开销增加 2/频率（默认 25 → +8%）。
+- 截断判据是"组内任一原子与任一 QM 原子"的最小镜像距离，因此要求 R_emb + D < 最短盒宽 / 2（D 为 QM 区尺寸），每步校验（NPT 下盒子会变）。
+- charge shift 是静态的：截断嵌入使用 shift 后的电荷，M1 不进入任何组。
 
 ---
 
@@ -723,9 +750,9 @@ E = Σ_{a<b ∈ QM} ½ k (|R_a − R_b| − r0_ab)² + Σ_{a ∈ QM, j ∈ emb} 
 2. H2O + 外部点电荷
 3. QM H2O + MM H2O（非周期）
 4. QM H2O + MM 水团簇（非周期，NVE）
-5. 共价边界小分子（乙醇或丙醇，QM/MM 切在 C–C 键上）
+5. 共价边界小分子（ACE-ALA-NME 二肽，QM/MM 切在侧链 CB–CA 键上）
 6. 溶剂化小分子（PBC，截断嵌入）
-7. 酶活性位点（PBC，link atom，截断嵌入）——具体体系在 M4 开始前与应用方确定
+7. 酶活性位点（PBC，link atom，截断嵌入）——卤代烷脱卤酶 DhlA（起始结构 PDB 2DHC 的 DCE 复合物；2HAD 为游离酶），Asp124 对 1,2-二氯乙烷的 SN2（2026-09-29 确定，细节见 `docs/plans/2026-09-29-m4-m5-prep.md` D1）。体系：ff14SB + DCE 用 OpenFF Sage/NAGL + TIP3P，6.83 nm 立方盒，31,610 原子，17 Na⁺。2026-10-01 跑通 1 ps（方案 A，r2SCAN-3c）：DhlA（PDB 2DHC，31,610 原子，PME），QM 方案 A（DCE + Asp124 侧链，15 原子含 1 个 link H，电荷 −1），r2SCAN-3c，40 个 MPI 进程，Langevin NVT 300 K、0.5 fs：2000 步（1 ps）无人工干预，5.53 s/步（ORCA 5.45 s；写 0.009 s、读 0.012 s），平均嵌入 152 个残基组（约 1,800 个点电荷），286 步有组进出截断，0 次 fresh SCF 重试；最后 500 步 298.6 ± 1.1 K；QM 键最大偏离 15.9%（来自 C1–Cl1：第 ~1907 步 O–C1 一度靠近到 0.232 nm 的 SN2 进攻尝试，随后回弹）。
 
 前 4 个验证数学正确性；5 验证边界；6、7 验证真实工作流。
 

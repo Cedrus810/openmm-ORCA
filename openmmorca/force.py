@@ -21,6 +21,7 @@ Known limitations (verified on OpenMM 8.5.2, see spec §2.8):
 
 from __future__ import annotations
 
+import logging
 from typing import Sequence
 
 import numpy as np
@@ -28,6 +29,11 @@ import openmm as mm
 from openmm import unit
 
 from openmmorca.backend.base import QMBackend, QMRequest, check_result
+from openmmorca.qmmm.embedding import CutoffEmbedding
+from openmmorca.qmmm.imaging import make_qm_whole
+from openmmorca.qmmm.linkatoms import LinkAtomManager
+
+logger = logging.getLogger(__name__)
 
 
 def _vsite_redistribution_map(system: mm.System) -> list[tuple[int, list[tuple[int, float]]]]:
@@ -69,6 +75,9 @@ class QMMMCallback:
         mm_atoms: Sequence[int] = (),
         mm_charges_e: Sequence[float] = (),
         system: mm.System | None = None,
+        link_manager: LinkAtomManager | None = None,
+        embedding: CutoffEmbedding | None = None,
+        qm_graph: dict[int, list[int]] | None = None,
     ) -> None:
         self.backend = backend
         self.qm_atoms = tuple(int(i) for i in qm_atoms)
@@ -83,6 +92,16 @@ class QMMMCallback:
         self._vsite_redistribution = (
             _vsite_redistribution_map(system) if system is not None else []
         )
+        self.link_manager = link_manager
+        if (embedding is None) != (qm_graph is None):
+            raise ValueError("embedding and qm_graph must be given together")
+        # Periodic mode: re-image the QM region (and boundary M1) each step and
+        # embed only the MM groups within the cutoff (spec §11).
+        self.embedding = embedding
+        self.qm_graph = qm_graph
+        n_links = link_manager.n_links if link_manager is not None else 0
+        # Link atoms are hydrogen caps appended after the QM atoms.
+        self._request_elements = self.qm_elements + ("H",) * n_links
         self.step: int = 0
 
     def __call__(self, state: mm.State) -> tuple[float, np.ndarray]:
@@ -93,26 +112,58 @@ class QMMMCallback:
                 f"configured for {self.n_particles}"
             )
 
+        box = None
+        if self.embedding is not None:
+            box = state.getPeriodicBoxVectors(asNumpy=True).value_in_unit(unit.nanometer)
+            positions = make_qm_whole(positions, self.qm_atoms, self.qm_graph, box)
+
         qm_positions = positions[list(self.qm_atoms)]
+        if self.link_manager is not None:
+            qm_positions = np.vstack(
+                [qm_positions, self.link_manager.link_positions(positions)]
+            )
+        mm_atoms: Sequence[int] = self.mm_atoms
         mm_positions = None
         mm_charges = None
-        if self.mm_atoms:
+        diagnostics: dict = {}
+        if self.embedding is not None:
+            mm_atoms, mm_positions, mm_charges = self.embedding.select(
+                positions[list(self.qm_atoms)], positions, box
+            )
+            diagnostics = {
+                "n_embed_groups": self.embedding.last_n_groups,
+                "embed_changed": self.embedding.last_changed,
+            }
+            if self.embedding.last_changed:
+                logger.debug(
+                    "step %d: %d embedding groups entered/left the cutoff (%d embedded)",
+                    self.step,
+                    self.embedding.last_changed,
+                    self.embedding.last_n_groups,
+                )
+            if len(mm_atoms) == 0:
+                mm_positions = mm_charges = None
+        elif self.mm_atoms:
             mm_positions = positions[list(self.mm_atoms)]
             mm_charges = self.mm_charges_e
         request = QMRequest(
-            qm_elements=self.qm_elements,
+            qm_elements=self._request_elements,
             qm_positions_nm=qm_positions,
             mm_positions_nm=mm_positions,
             mm_charges_e=mm_charges,
             step=self.step,
+            diagnostics=diagnostics,
         )
         result = self.backend.evaluate(request)
         check_result(request, result)
 
         forces = np.zeros((self.n_particles, 3))
-        forces[list(self.qm_atoms)] = result.qm_forces_kj_mol_nm
-        if self.mm_atoms:
-            forces[list(self.mm_atoms)] += result.mm_forces_kj_mol_nm
+        n_qm = len(self.qm_atoms)
+        forces[list(self.qm_atoms)] = result.qm_forces_kj_mol_nm[:n_qm]
+        if self.link_manager is not None:
+            self.link_manager.redistribute(forces, result.qm_forces_kj_mol_nm[n_qm:])
+        if request.n_mm > 0:
+            forces[list(mm_atoms)] += result.mm_forces_kj_mol_nm
         # OpenMM takes the PythonForce force array literally (no virtual-site
         # redistribution), so move site forces onto the parent atoms here.
         for vsite, parents in self._vsite_redistribution:
@@ -125,10 +176,14 @@ class QMMMCallback:
 
 
 def make_python_force(
-    callback: QMMMCallback, force_group: int = 0, name: str = "ORCA QM/MM"
+    callback: QMMMCallback,
+    force_group: int = 0,
+    name: str = "ORCA QM/MM",
+    periodic: bool = False,
 ) -> mm.PythonForce:
     """Wrap *callback* in an OpenMM PythonForce with the given force group."""
     force = mm.PythonForce(callback)
     force.setForceGroup(force_group)
     force.setName(name)
+    force.setUsesPeriodicBoundaryConditions(periodic)
     return force

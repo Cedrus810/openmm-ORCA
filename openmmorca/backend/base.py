@@ -17,6 +17,9 @@ class QMRequest:
     mm_positions_nm: np.ndarray | None = None  # (n_mm, 3)
     mm_charges_e: np.ndarray | None = None  # (n_mm,)
     step: int = 0
+    # Per-step bookkeeping from the OpenMM layer (e.g. embedding group counts),
+    # recorded by backends that keep a timing log; never affects the result.
+    diagnostics: dict = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         qm_positions = np.asarray(self.qm_positions_nm, dtype=float)
