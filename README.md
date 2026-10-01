@@ -4,9 +4,9 @@ English | [简体中文](README.zh-CN.md)
 
 OpenMM-driven QM/MM: **OpenMM runs the MD** (force field, integrator, thermostat/barostat, trajectories) while **ORCA computes the QM region** (electronic structure + electrostatic-embedding gradients), with OPI (ORCA Python Interface) handling ORCA input/output. The interface style follows `openmm-ml` / `openmm-pyscf`.
 
-Design spec: `openmm_orca_opi_design_plan.md`; implementation plan: `docs/plans/2026-09-26-openmm-orca-implementation-plan.md`; ONIOM plan: `docs/plans/2026-09-28-oniom.md` (all in Chinese).
+Changes per version: [CHANGELOG.md](CHANGELOG.md). Design spec: `openmm_orca_opi_design_plan.md`; implementation plan: `docs/plans/2026-09-26-openmm-orca-implementation-plan.md`; ONIOM plan: `docs/plans/2026-09-28-oniom.md` (all in Chinese).
 
-**Current status (v0.2.1):** full-QM, QM/MM (electronic embedding) and two-layer ONIOM (QM:QM) for non-periodic systems, plus restart and failure-bundle diagnostics, are working (M0–M3 + ONIOM). Link atoms (v0.3) and periodic MM + cutoff embedding (v0.4) are planned.
+**Current status (v0.4.0):** full-QM, QM/MM (electronic embedding, covalent boundaries with H link atoms, periodic MM with approximate cutoff embedding) and two-layer ONIOM (QM:QM, non-periodic), plus restart and failure-bundle diagnostics, are working (M0–M5 + ONIOM). Validated on a solvated enzyme (DhlA, 31,610 atoms, `examples/enzyme_qmmm.py`).
 
 ## Installation
 
@@ -52,6 +52,26 @@ potential = ORCAPotential(method="HF", basis="def2-SVP", extra_keywords=("TightS
 mixed = potential.createMixedSystem(topology, system, atoms=[0, 1, 2], forceGroup=0)
 ```
 
+Covalent QM/MM boundaries with H link atoms (v0.3; finite differences through the link atom agree with ORCA analytic forces to < 0.05 kJ/mol/nm, see `examples/link_atom_dipeptide.py`). Declare every cut bond as `(q1, m1)` with q1 in the QM region and m1 in MM; each gets a hydrogen cap at `R_q1 + g (R_m1 − R_q1)` whose force is split onto q1/m1 by the chain rule:
+
+```python
+mixed = potential.createMixedSystem(
+    topology, system, atoms=qm_atoms,
+    boundaryPairs=[(cb, ca)],      # e.g. cut an amino-acid side chain at CB–CA
+    linkRatios=None,               # default g for C–C (1.09/1.526) and C–N (1.09/1.449)
+)
+```
+
+`charge`/`multiplicity` then describe the QM atoms plus link H. Single bonds only, one link per q1. The m1 charge is removed from the embedding and spread evenly over its MM neighbours (a *simplified* charge shift — no dipole-restoring point-charge pairs as in the literature scheme); OpenMM's MM–MM electrostatics are unchanged. A QM region cut out of force-field residues usually carries a non-integer force-field charge x per cut residue; the residual x − round(x) is added to that residue's M2 atoms, so every cut residue's MM remainder — and the whole embedding — carries an integer charge. A warning is issued when a residue's QM part is close to a half-integer charge (ambiguous rounding) or when `charge` differs from the charge the force field implies for the QM region.
+
+Periodic QM/MM with cutoff embedding (v0.4; enzyme example `examples/enzyme_qmmm.py`). A periodic System (NonbondedForce with PME, LJPME or Ewald; `CutoffPeriodic` is rejected) switches the callback to cutoff embedding: each step the QM region (and any link-atom m1) is re-imaged into one piece, and only the MM residues with an atom within `embeddingCutoff` of a QM atom are embedded, whole, at their nearest image:
+
+```python
+mixed = potential.createMixedSystem(topology, system, atoms=qm_atoms, embeddingCutoff=1.2 * unit.nanometer)
+```
+
+**This is an approximation**: QM–MM electrostatics beyond the cutoff are neglected (not PME-consistent), and residues crossing the cutoff make the energy discontinuous, so strict NVE energy conservation is not expected. `embeddingCutoff` plus the QM region's extent must stay below half the narrowest box width (checked every step). The timing log records `n_embed_groups` and `embed_changed` per step.
+
 ONIOM (two-layer subtractive QM:QM; here HF/STO-3G on water 0, xTB on all 5 waters — see `examples/oniom_water_cluster.py`):
 
 ```python
@@ -64,9 +84,9 @@ oniom = ONIOMPotential(
 system = oniom.createONIOMSystem(topology, atoms=[0, 1, 2], forceGroup=0)
 ```
 
-The energy is the standard subtractive combination `E_high(model) + E_low(full) − E_low(model)`; layers couple mechanically (no point-charge embedding between QM layers), the model region must be whole molecules, and the System carries no force-field terms. Each step costs three QM evaluations (one high, two low) through three independent backends, so every restart chain stays correctly sized. `high`'s charge/multiplicity describe the model region, `low`'s the full system (the low-layer-only atoms must carry zero net charge). Every `createONIOMSystem` call creates those three backends; `oniom.summarize_timings()` / `oniom.close()` aggregate over both layers.
+The energy is the standard subtractive combination `E_high(model) + E_low(full) − E_low(model)`; layers couple mechanically (no point-charge embedding between QM layers), the model region must be whole molecules, and the System carries no force-field terms. Each step costs three QM evaluations (one high, two low) through three independent backends, so every restart chain stays correctly sized. `high`'s charge/multiplicity describe the model region, `low`'s the full system; the low-level model-region evaluation uses `high`'s charge/multiplicity, so the low-layer-only atoms may be charged or open-shell. Every `createONIOMSystem` call creates those three backends; `oniom.summarize_timings()` / `oniom.close()` aggregate over both layers.
 
-QM/MM water-cluster NVE (1 ps, energy-conservation check): `examples/qmmm_water_cluster_nve.py`; ONIOM counterpart: `examples/oniom_water_cluster.py`.
+QM/MM water-cluster NVE (1 ps, energy-conservation check): `examples/qmmm_water_cluster_nve.py`; ONIOM counterpart: `examples/oniom_water_cluster.py`; link-atom dipeptide NVT: `examples/link_atom_dipeptide.py`.
 
 ## Parameters (`ORCAPotential.__init__`)
 
@@ -107,11 +127,12 @@ cd <scratch>/failures/failure_step_000123 && $OPI_ORCA/orca qm.inp > rerun.out
 
 `ORCAPotential.summarize_timings()` returns mean/P50/P95 timings per backend (the cold-start first step is skipped automatically).
 
-## Known limitations (before v0.4)
+## Known limitations
 
-- Non-periodic systems, whole molecules as the QM/ONIOM model region (periodic + cutoff embedding planned for M5); QM/MM boundaries needing link atoms arrive in M4. ONIOM layers couple mechanically (no embedding between QM layers) and the low-layer-only atoms must carry zero net charge.
+- Periodic systems only through the approximate cutoff embedding above; ONIOM is non-periodic. QM/MM regions may cut single bonds via link atoms (see above); the ONIOM model region must still be whole molecules. ONIOM layers couple mechanically (no embedding between QM layers).
 - Systems containing the PythonForce cannot be XML-serialized (the callback holds a lock and a temp directory).
 - Every step pays a fixed process-startup overhead (≈0.4 s serial); not negligible for small QM regions.
+- Under NPT, each `MonteCarloBarostat` attempt triggers two extra QM evaluations (+8% QM cost at the default frequency of 25).
 - Embedding charges go through a `%pointcharges` file; inline `Q` is forbidden (it double-counts MM–MM electrostatics and yields no pcgrad).
 - Stale forces are never returned on SCF failure: when retries fail, it hard-errors and stops the MD.
 

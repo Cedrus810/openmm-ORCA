@@ -188,16 +188,23 @@ def particle_charges(nonbonded: mm.NonbondedForce) -> np.ndarray:
     )
 
 
-def check_whole_molecules(topology: openmm.app.Topology, qm_atoms) -> None:
-    """Reject QM selections that cut a molecule across a covalent bond."""
+def check_whole_molecules(
+    topology: openmm.app.Topology, qm_atoms, allowed_bonds=()
+) -> None:
+    """Reject QM selections that cut a molecule across a covalent bond.
+
+    *allowed_bonds* lists (i, j) bonds that may cross the boundary — the
+    declared link-atom boundaries of a QM/MM system. By default none may.
+    """
     qm = set(qm_atoms)
+    allowed = {frozenset((int(i), int(j))) for i, j in allowed_bonds}
     for atom1, atom2 in topology.bonds():
         i1, i2 = atom1.index, atom2.index
-        if (i1 in qm) != (i2 in qm):
+        if (i1 in qm) != (i2 in qm) and frozenset((i1, i2)) not in allowed:
             raise ValueError(
                 f"the QM region cuts a covalent bond between atoms {i1} and "
-                f"{i2}; the QM region must contain whole molecules (covalent "
-                "QM/MM boundaries with link atoms are not supported yet)"
+                f"{i2}; the QM region must contain whole molecules unless the "
+                "bond is declared as a QM/MM link-atom boundary (boundaryPairs)"
             )
 
 
@@ -235,8 +242,10 @@ class MixedSystemParts:
     qm_atoms: tuple[int, ...]  # user order preserved
     qm_elements: tuple[str, ...]
     mm_atoms: tuple[int, ...]  # charged MM particles only (|q| > 1e-12)
-    mm_charges_e: np.ndarray  # aligned with mm_atoms, original charges
+    mm_charges_e: np.ndarray  # aligned with mm_atoms; charge-shifted at boundaries
     removed_qm_charges: dict[int, float]
+    boundary_pairs: tuple = ()  # tuple[BoundaryPair, ...] (qmmm.linkatoms)
+    qm_formal_charge: int = 0  # charge the force field implies for the QM region
 
 
 def build_mixed_system(
@@ -244,20 +253,34 @@ def build_mixed_system(
     system: mm.System,
     qm_atoms,
     remove_constraints: bool = True,
+    boundary_pairs=(),
 ) -> MixedSystemParts:
-    """Copy and modify *system* for QM/MM (spec §6, Task 7 ordering)."""
+    """Copy and modify *system* for QM/MM (spec §6, Task 7 ordering).
+
+    *boundary_pairs* (``BoundaryPair`` objects) declare the covalent bonds the
+    QM region may cut; they get H link atoms (spec §10).
+    """
+    # Local import: linkatoms builds on check_whole_molecules from this module.
+    from openmmorca.qmmm.charges import ChargeShift, residue_charge_corrections
+    from openmmorca.qmmm.linkatoms import check_boundary_pairs
+
     n_particles = system.getNumParticles()
     qm_atoms = validate_atom_indices(qm_atoms, n_particles)
-    if system.usesPeriodicBoundaryConditions():
-        raise NotImplementedError(
-            "periodic QM/MM is planned for M5; this build supports non-periodic systems only"
-        )
 
-    check_whole_molecules(topology, qm_atoms)
+    boundary_pairs = tuple(boundary_pairs)
+    check_boundary_pairs(topology, qm_atoms, boundary_pairs)
 
     new_system = copy_system(system)
     check_supported_forces(new_system)
     nonbonded = get_nonbonded_force(new_system)
+    if new_system.usesPeriodicBoundaryConditions():
+        method = nonbonded.getNonbondedMethod()
+        if method not in (mm.NonbondedForce.PME, mm.NonbondedForce.Ewald, mm.NonbondedForce.LJPME):
+            raise ValueError(
+                "periodic QM/MM requires PME, LJPME or Ewald for the NonbondedForce "
+                "(CutoffPeriodic uses reaction-field electrostatics, which the "
+                "point-charge embedding does not reproduce)"
+            )
     if (
         nonbonded.getNumParticleParameterOffsets() > 0
         or nonbonded.getNumExceptionParameterOffsets() > 0
@@ -306,6 +329,21 @@ def build_mixed_system(
         if p not in qm_side and abs(original_charges[p]) > _ZERO_CHARGE_TOL
     )
     mm_charges = np.array([original_charges[p] for p in mm_atoms])
+    # Only the charges handed to the QM code change (spec §10.4): shift each M1
+    # onto its M2, then give every cut residue's MM remainder an integer charge.
+    if boundary_pairs:
+        mm_atoms, mm_charges = ChargeShift().embedding_charges(
+            topology, mm_atoms, mm_charges, boundary_pairs
+        )
+    corrections, qm_formal_charge = residue_charge_corrections(
+        topology, qm_side, original_charges, boundary_pairs
+    )
+    if corrections:
+        embedded = dict(zip(mm_atoms, mm_charges))
+        for atom, delta in corrections.items():
+            embedded[atom] = embedded.get(atom, 0.0) + delta
+        mm_atoms = tuple(sorted(embedded))
+        mm_charges = np.array([embedded[a] for a in mm_atoms])
 
     return MixedSystemParts(
         system=new_system,
@@ -314,4 +352,6 @@ def build_mixed_system(
         mm_atoms=mm_atoms,
         mm_charges_e=mm_charges,
         removed_qm_charges=removed_qm_charges,
+        boundary_pairs=boundary_pairs,
+        qm_formal_charge=qm_formal_charge,
     )

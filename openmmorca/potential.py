@@ -7,6 +7,7 @@ System + PythonForce from the qmmm/ layer.
 
 from __future__ import annotations
 
+import warnings
 from typing import Callable, Sequence
 
 import openmm as mm
@@ -17,6 +18,15 @@ from openmmorca.backend.base import QMBackend
 from openmmorca.backend.orca_opi import ORCAConfig, ORCAOPIBackend
 from openmmorca.force import QMMMCallback, make_python_force
 from openmmorca.qmmm import build_mixed_system
+import numpy as np
+
+from openmmorca.qmmm.embedding import (
+    CutoffEmbedding,
+    check_cutoff_against_box,
+    groups_from_topology,
+)
+from openmmorca.qmmm.imaging import qm_bond_graph
+from openmmorca.qmmm.linkatoms import LinkAtomManager, make_boundary_pairs
 
 
 def topology_masses(topology: openmm.app.Topology) -> list[float]:
@@ -30,7 +40,7 @@ def topology_masses(topology: openmm.app.Topology) -> list[float]:
         if atom.element is None:
             raise ValueError(
                 f"atom {atom.name} (index {atom.index}) has no element; "
-                "full-QM systems require real atoms"
+                "full-QM and ONIOM systems require real atoms (no virtual sites)"
             )
         mass = atom.element.mass
         masses.append(
@@ -88,11 +98,12 @@ class ORCAPotential:
 
     # ------------------------------------------------------------------
 
-    def _create_backend(self) -> QMBackend:
+    def _create_backend(self, config: ORCAConfig | None = None) -> QMBackend:
+        """New backend for *config* (default: this potential's own configuration)."""
         if self._backend_factory is not None:
             backend = self._backend_factory()
         else:
-            backend = ORCAOPIBackend(self.config)
+            backend = ORCAOPIBackend(self.config if config is None else config)
         self.backends.append(backend)
         return backend
 
@@ -122,8 +133,22 @@ class ORCAPotential:
         forceGroup: int = 0,
         interpolate: bool = False,
         embedding: str = "electronic",
+        boundaryPairs: Sequence[tuple[int, int]] | None = None,
+        linkRatios: Sequence[float] | None = None,
+        embeddingCutoff=1.2 * unit.nanometer,
     ) -> mm.System:
-        """Build a QM/MM System: *atoms* (OpenMM indices) are treated by ORCA."""
+        """Build a QM/MM System: *atoms* (OpenMM indices) are treated by ORCA.
+
+        *boundaryPairs* lists covalent (q1, m1) bonds the QM region may cut
+        (q1 QM, m1 MM); each gets an H link atom at R_q1 + g (R_m1 - R_q1),
+        with g from *linkRatios* or the element-pair default (C–C, C–N).
+        ``charge``/``multiplicity`` then describe the QM atoms plus link H.
+
+        Periodic systems (PME, LJPME or Ewald) use cutoff embedding: each step
+        the QM region sees only the MM residues within *embeddingCutoff* of a
+        QM atom (minimum image, whole residues). QM–MM electrostatics beyond
+        embeddingCutoff are neglected; this is not PME-consistent.
+        """
         if interpolate:
             raise NotImplementedError(
                 "interpolated QM/MM potentials are not supported"
@@ -132,8 +157,44 @@ class ORCAPotential:
             raise ValueError(
                 f"unsupported embedding {embedding!r}; supported: {self.getSupportedEmbeddings()}"
             )
+        pairs = make_boundary_pairs(topology, boundaryPairs or (), linkRatios)
         backend = self._create_backend()
-        parts = build_mixed_system(topology, system, atoms, remove_constraints=removeConstraints)
+        parts = build_mixed_system(
+            topology,
+            system,
+            atoms,
+            remove_constraints=removeConstraints,
+            boundary_pairs=pairs,
+        )
+        if parts.qm_formal_charge != self.config.charge:
+            warnings.warn(
+                f"QM charge {self.config.charge} differs from the charge the force field "
+                f"implies for the QM region ({parts.qm_formal_charge}); this is only "
+                "intended for a deliberately changed protonation or redox state",
+                UserWarning,
+                stacklevel=2,
+            )
+        periodic = parts.system.usesPeriodicBoundaryConditions()
+        embedding = qm_graph = None
+        if periodic:
+            cutoff_nm = (
+                embeddingCutoff.value_in_unit(unit.nanometer)
+                if hasattr(embeddingCutoff, "value_in_unit")
+                else float(embeddingCutoff)
+            )
+            box = np.array(
+                [
+                    v.value_in_unit(unit.nanometer)
+                    for v in parts.system.getDefaultPeriodicBoxVectors()
+                ]
+            )
+            check_cutoff_against_box(cutoff_nm, box)
+            charges = np.zeros(parts.system.getNumParticles())
+            charges[list(parts.mm_atoms)] = parts.mm_charges_e
+            embedding = CutoffEmbedding(
+                groups_from_topology(topology, parts.mm_atoms), charges, cutoff_nm
+            )
+            qm_graph = qm_bond_graph(topology, parts.qm_atoms, pairs)
         callback = QMMMCallback(
             backend,
             parts.qm_atoms,
@@ -142,8 +203,11 @@ class ORCAPotential:
             parts.mm_atoms,
             parts.mm_charges_e,
             system=parts.system,
+            link_manager=LinkAtomManager(pairs) if pairs else None,
+            embedding=embedding,
+            qm_graph=qm_graph,
         )
-        force = make_python_force(callback, force_group=forceGroup)
+        force = make_python_force(callback, force_group=forceGroup, periodic=periodic)
         parts.system.addForce(force)
         return parts.system
 

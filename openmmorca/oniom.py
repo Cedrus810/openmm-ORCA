@@ -21,6 +21,7 @@ two low) through three independent backends, so every restart chain (MO-guess
 
 from __future__ import annotations
 
+import dataclasses
 import warnings
 
 import numpy as np
@@ -112,12 +113,10 @@ class ONIOMCallback:
 class ONIOMPotential:
     """Two-layer ONIOM assembled from two :class:`ORCAPotential` instances.
 
-    ``high`` describes the model region: its charge/multiplicity must be the
-    model-region values. ``low`` describes the full system: its charge/
-    multiplicity must be the total values. Because the low configuration is
-    shared by the full-system and model-region evaluations, the low-layer-only
-    atoms must carry zero net charge (always true for neutral systems and for
-    net charges residing inside the model region).
+    ``high``'s charge/multiplicity are the model-region values, ``low``'s the
+    full-system values. The low-level model-region evaluation runs the low
+    configuration with the *model-region* charge/multiplicity (taken from
+    ``high``), so the low-layer-only atoms may be charged or open-shell.
 
     Every ``createONIOMSystem`` call creates three fresh backends — one high,
     two low (full system, model region) — each with its own scratch directory
@@ -144,6 +143,14 @@ class ONIOMPotential:
         """Build the ONIOM System: *atoms* (OpenMM indices) form the high-level model region."""
         atoms = validate_atom_indices(atoms, topology.getNumAtoms(), name="atoms")
         check_whole_molecules(topology, atoms)
+        if topology.getNumBonds() == 0 and len(atoms) < topology.getNumAtoms():
+            warnings.warn(
+                "the topology has no bonds, so the whole-molecule check cannot "
+                "detect a model region that cuts a molecule; add bonds to the "
+                "topology (e.g. createStandardBonds or PDB CONECT records)",
+                UserWarning,
+                stacklevel=2,
+            )
         masses = topology_masses(topology)
         elements = [atom.element.symbol for atom in topology.atoms()]
         if len(atoms) == len(elements):
@@ -156,7 +163,15 @@ class ONIOMPotential:
 
         high_backend = self.high._create_backend()
         low_full_backend = self.low._create_backend()
-        low_model_backend = self.low._create_backend()
+        # E_low(model) describes the model region, whose charge/multiplicity
+        # are high's — not the full-system values of the low configuration.
+        low_model_backend = self.low._create_backend(
+            dataclasses.replace(
+                self.low.config,
+                charge=self.high.config.charge,
+                multiplicity=self.high.config.multiplicity,
+            )
+        )
         callback = ONIOMCallback(
             high_backend,
             low_full_backend,
@@ -180,6 +195,8 @@ class ONIOMPotential:
 
     def summarize_timings(self) -> list[dict]:
         """Timing summaries of every backend of both layers."""
+        if self.high is self.low:
+            return self.high.summarize_timings()
         return self.high.summarize_timings() + self.low.summarize_timings()
 
     def close(self) -> None:

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openmm-orca"
-version = "0.2.1"
+version = "0.4.0"
 description = "OpenMM-driven QM/MM and ONIOM with ORCA (via OPI) as the QM backend"
 readme = "README.md"
 license = "MIT"

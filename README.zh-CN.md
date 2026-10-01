@@ -4,9 +4,9 @@
 
 OpenMM 驱动的 QM/MM：**OpenMM 负责 MD**（力场、积分器、温压控、轨迹），**ORCA 计算 QM 区**（电子结构 + 静电嵌入梯度），OPI（ORCA Python Interface）负责 ORCA 输入输出。接口风格与 `openmm-ml` / `openmm-pyscf` 一致。
 
-设计规格：`openmm_orca_opi_design_plan.md`；实施计划：`docs/plans/2026-09-26-openmm-orca-implementation-plan.md`；ONIOM 计划：`docs/plans/2026-09-28-oniom.md`。
+各版本变更：[CHANGELOG.zh-CN.md](CHANGELOG.zh-CN.md)。设计规格：`openmm_orca_opi_design_plan.md`；实施计划：`docs/plans/2026-09-26-openmm-orca-implementation-plan.md`；ONIOM 计划：`docs/plans/2026-09-28-oniom.md`。
 
-**当前状态（v0.2.1）**：非周期体系的 full-QM / QM/MM（电子嵌入）/ 双层 ONIOM（QM:QM）、restart 与失败包诊断已可用（M0–M3 + ONIOM）；link atom（v0.3）与周期性 MM + 截断嵌入（v0.4）在计划中。
+**当前状态（v0.4.0）**：full-QM、QM/MM（电子嵌入，含 H link atom 共价边界、周期性 MM 的近似截断嵌入）、双层 ONIOM（QM:QM，非周期）、restart 与失败包诊断已可用（M0–M5 + ONIOM）。已在溶剂化酶体系上验证（DhlA，31,610 原子，`examples/enzyme_qmmm.py`）。
 
 ## 安装
 
@@ -52,6 +52,26 @@ potential = ORCAPotential(method="HF", basis="def2-SVP", extra_keywords=("TightS
 mixed = potential.createMixedSystem(topology, system, atoms=[0, 1, 2], forceGroup=0)
 ```
 
+带 H link atom 的共价 QM/MM 边界（v0.3；经 link atom 的有限差分与 ORCA 解析力之差 < 0.05 kJ/mol/nm，见 `examples/link_atom_dipeptide.py`）。每条被切断的键声明为 `(q1, m1)`，q1 在 QM 区、m1 在 MM 区；每条边界在 `R_q1 + g (R_m1 − R_q1)` 处放一个 H，其受力按链式法则分给 q1/m1：
+
+```python
+mixed = potential.createMixedSystem(
+    topology, system, atoms=qm_atoms,
+    boundaryPairs=[(cb, ca)],      # 例如在 CB–CA 处切氨基酸侧链
+    linkRatios=None,               # C–C（1.09/1.526）与 C–N（1.09/1.449）有默认 g
+)
+```
+
+此时 `charge`/`multiplicity` 描述"QM 原子 + link H"。只支持单键，每个 q1 一个 link。m1 的电荷从嵌入中去掉、平均加到它的 MM 邻居上（**简化版** charge shift，不含文献方案中补偿键偶极的点电荷对）；OpenMM 中 MM–MM 静电不变。从力场残基中切出的 QM 区，每个被切开残基的 QM 部分力场电荷 x 通常不是整数；残差 x − round(x) 会加到该残基的 M2 原子上，使每个被切开残基剩下的 MM 部分（以及整个嵌入）都是整数电荷。某个残基的 QM 部分接近半整数（取整有歧义）、或 `charge` 与力场推出的 QM 区电荷不一致时发警告。
+
+带截断嵌入的周期性 QM/MM（v0.4；酶体系示例 `examples/enzyme_qmmm.py`）。System 是周期性的（NonbondedForce 用 PME、LJPME 或 Ewald；`CutoffPeriodic` 会被拒绝）时，回调切换为截断嵌入：每步先把 QM 区（以及 link atom 的 m1）拼回同一个镜像，只有某个原子落在任一 QM 原子 `embeddingCutoff` 以内的 MM 残基才被整体嵌入，取离 QM 区最近的镜像：
+
+```python
+mixed = potential.createMixedSystem(topology, system, atoms=qm_atoms, embeddingCutoff=1.2 * unit.nanometer)
+```
+
+**这是近似**：截断以外的 QM–MM 静电被忽略（与 PME 不一致），残基进出截断球会让能量不连续，因此不保证严格的 NVE 能量守恒。`embeddingCutoff` 加上 QM 区尺寸必须小于最窄盒宽的一半（每步检查）。计时日志每步记录 `n_embed_groups` 与 `embed_changed`。
+
 ONIOM（双层减法 QM:QM；这里水 0 用 HF/STO-3G，5 个水全部用 xTB——见 `examples/oniom_water_cluster.py`）：
 
 ```python
@@ -64,9 +84,9 @@ oniom = ONIOMPotential(
 system = oniom.createONIOMSystem(topology, atoms=[0, 1, 2], forceGroup=0)
 ```
 
-能量是标准减法组合 `E_high(model) + E_low(full) − E_low(model)`；层间机械耦合（QM 层之间不加点电荷嵌入）、model 区必须整分子、System 不含力场项。每步 3 次 QM 调用（1 高 2 低），走 3 个独立 backend，各 restart 链尺寸自洽。`high` 的 charge/multiplicity 描述 model 区，`low` 的描述全体系（low-only 原子的净电荷必须为 0）。每次 `createONIOMSystem` 都会新建这 3 个 backend；`oniom.summarize_timings()` / `oniom.close()` 汇总两层。
+能量是标准减法组合 `E_high(model) + E_low(full) − E_low(model)`；层间机械耦合（QM 层之间不加点电荷嵌入）、model 区必须整分子、System 不含力场项。每步 3 次 QM 调用（1 高 2 低），走 3 个独立 backend，各 restart 链尺寸自洽。`high` 的 charge/multiplicity 描述 model 区，`low` 的描述全体系；低层 model 区计算使用 `high` 的 charge/multiplicity，因此 low-only 原子可以带电或开壳层。每次 `createONIOMSystem` 都会新建这 3 个 backend；`oniom.summarize_timings()` / `oniom.close()` 汇总两层。
 
-QM/MM 团簇 NVE（1 ps，验证能量守恒）：`examples/qmmm_water_cluster_nve.py`；ONIOM 对应版本：`examples/oniom_water_cluster.py`。
+QM/MM 团簇 NVE（1 ps，验证能量守恒）：`examples/qmmm_water_cluster_nve.py`；ONIOM 对应版本：`examples/oniom_water_cluster.py`；link atom 二肽 NVT：`examples/link_atom_dipeptide.py`。
 
 ## 参数（`ORCAPotential.__init__`）
 
@@ -107,11 +127,12 @@ cd <scratch>/failures/failure_step_000123 && $OPI_ORCA/orca qm.inp > rerun.out
 
 `ORCAPotential.summarize_timings()` 返回每个后端的 mean/P50/P95 耗时（自动跳过冷启动第一步）。
 
-## 已知限制（v0.4 前）
+## 已知限制
 
-- 非周期体系、整分子 QM / ONIOM model 区（周期性 + 截断嵌入在 M5）；QM/MM 边界需要 link atom 时在 M4。ONIOM 层间机械耦合（不带嵌入），且 low-only 原子净电荷必须为 0。
+- 周期体系只能通过上述近似截断嵌入；ONIOM 只支持非周期。QM/MM 区可以经 link atom 切断单键（见上文）；ONIOM 的 model 区仍须整分子。ONIOM 层间机械耦合（不带嵌入）。
 - 包含 PythonForce 的 System 不能 XML 序列化（回调持有锁与临时目录）。
 - 每步有进程启动固定开销（串行 ≈0.4 s）；QM 区很小时这不可忽略。
+- NPT 下 `MonteCarloBarostat` 每次尝试额外触发 2 次 QM 计算（默认频率 25 时 QM 开销 +8%）。
 - 嵌入电荷走 `%pointcharges` 文件；禁止 inline `Q`（会重复计算 MM–MM 静电且无 pcgrad）。
 - SCF 失败绝不返回旧力：重试失败即硬报错并停 MD。
 

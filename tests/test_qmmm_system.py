@@ -231,13 +231,19 @@ def test_bad_indices_rejected():
             build_mixed_system(topology, system, bad)
 
 
-def test_periodic_not_yet_supported():
+def test_periodic_requires_pme_or_ewald():
+    """Periodic QM/MM (M5): PME/Ewald accepted, reaction-field CutoffPeriodic rejected."""
     topology = helpers.water_topology(2)
     topology.setUnitCellDimensions((3.0, 3.0, 3.0) * unit.nanometer)
     forcefield = app.ForceField("tip3p.xml")
     system = forcefield.createSystem(topology, nonbondedMethod=app.PME, rigidWater=False)
     assert system.usesPeriodicBoundaryConditions()
-    with pytest.raises(NotImplementedError, match="M5"):
+    parts = build_mixed_system(topology, system, [0, 1, 2])
+    assert parts.system.usesPeriodicBoundaryConditions()
+    system = forcefield.createSystem(
+        topology, nonbondedMethod=app.CutoffPeriodic, rigidWater=False
+    )
+    with pytest.raises(ValueError, match="CutoffPeriodic"):
         build_mixed_system(topology, system, [0, 1, 2])
 
 

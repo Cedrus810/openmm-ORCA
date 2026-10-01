@@ -99,8 +99,8 @@
 | M1 OpenMM 层 + fake 后端 | Task 6–9 | — | 完成 |
 | M2 非周期电子嵌入 | Task 10–11 | v0.1 | 完成（2026-09-27） |
 | M3 restart 与健壮性 | Task 12–15 | v0.2 | 完成（2026-09-27），发布 0.2.0 |
-| M4 link atom | Task 16–18 | v0.3 | 未开始 |
-| M5 周期性 MM + 截断嵌入 | Task 19–22 | v0.4 | 未开始 |
+| M4 link atom | Task 16–18 | v0.3 | 完成（2026-09-29），版本 0.3.0 |
+| M5 周期性 MM + 截断嵌入 | Task 19–22 | v0.4 | 完成（2026-10-01），版本 0.4.0 |
 
 Task 14 的基准只测到 nprocs=32（本机 4 个物理核留给别的工作），结果见 spec §2.2.1。
 
@@ -898,13 +898,17 @@ class ORCAOPIBackend:
 
 # M4：link atom（v0.3）
 
-> **开始前必须与应用负责人确定**：目标酶体系，以及其中的 QM/MM 边界类型（spec §15 第 7 项）。本里程碑只支持单键 C–C（或 C–N）边界的 H link atom，边界电荷只用 charge-shift。
+> **目标酶体系已确定（2026-09-29）**：卤代烷脱卤酶 DhlA（起始结构 PDB 2DHC，2HAD 为游离酶），细节见 `docs/plans/2026-09-29-m4-m5-prep.md` 的 D1。本里程碑只支持单键 C–C（或 C–N）边界的 H link atom，每个 Q1 最多一个 M1（prep D2），边界电荷只用简化 charge-shift（无偶极修正，prep C3）。开工前的修正 C1–C10 已并入下文各任务。
+>
+> **统一测试体系（prep C4）**：ACE-ALA-NME 二肽。结构一次性用 `openmmtools.testsystems.AlanineDipeptideVacuum` 生成并存为 `tests/data/ace_ala_nme.pdb`（含氢）；测试中用 OpenMM 自带的 `amber14-all.xml` 现场 `createSystem(nonbondedMethod=NoCutoff, constraints=None)`，测试运行不依赖 openmmtools。
 
 ### Task 16：link atom 几何与力回分
 
 **文件：**
 - 新建：`openmmorca/qmmm/linkatoms.py`
-- 修改：`openmmorca/qmmm/__init__.py`、`openmmorca/qmmm/system.py`（`check_whole_molecules` 放行用户声明的边界键）、`openmmorca/force.py`、`openmmorca/potential.py`
+- 修改：`openmmorca/qmmm/__init__.py`、`openmmorca/qmmm/system.py`（`check_whole_molecules` 增加可选参数 `allowed_bonds`，默认不放行任何键）、`openmmorca/force.py`、`openmmorca/potential.py`
+- 不改但要回归：`openmmorca/oniom.py` 仍以默认参数调用 `check_whole_molecules`（ONIOM 的 link atom 推后，prep D4），`tests/test_oniom.py` 必须照常通过
+- 新建：`tests/data/ace_ala_nme.pdb`
 - 测试：`tests/test_linkatoms.py`
 
 **接口：**
@@ -939,7 +943,7 @@ QMMMCallback.__init__(..., link_manager: LinkAtomManager | None = None)
 **要求：**
 - 键合项规则保持 spec §6.3（所有原子都在 QM 区才置零）。这个任务要用测试确认 Q1–M1 键、跨边界的角和二面角都被保留。
 - NonbondedForce 的处理不变（spec §10.5）：Q1 电荷置零，涉及 QM 原子的 exception 的 chargeProd 置零，LJ 保留。
-- 用户给出的 `charge` 是"QM 原子 + link H"的总电荷。电子数检查（Task 4）要把 link H 算进去。
+- 用户给出的 `charge` 是"QM 原子 + link H"的总电荷。电子数检查（Task 4）按 `request.qm_elements` 计数，link H 进入请求后自动计入（prep F7），加测试确认即可。
 
 **测试用例：**
 
@@ -947,12 +951,17 @@ QMMMCallback.__init__(..., link_manager: LinkAtomManager | None = None)
 |---|---|
 | `test_link_position_formula` | Q1 = (0,0,0)，M1 = (0.15,0,0) nm，g = 0.7 → L = (0.105,0,0) |
 | `test_redistribute_chain_rule` | F_L = (1,2,3)，g = 0.7 → Q1 增加 (0.3,0.6,0.9)，M1 增加 (0.7,1.4,2.1) |
-| `test_fd_with_link_atoms_fake_backend` | 丙醇（或 ACE-ALA-NME 的一段），切在一个 C–C 键上，用 FakeBackend（假电荷数 = QM 原子数 + 1）：对 Q1、M1 的全部 6 个坐标在 Context 总能量上做中心差分，误差 < 1e-3 kJ/mol/nm |
-| `test_boundary_bonded_terms_kept` | 同上体系：Q1–M1 键、Q2–Q1–M1 角、跨边界二面角的力常数不为 0；所有原子都在 QM 区的项为 0 |
+| `test_fd_with_link_atoms_fake_backend` | 二肽，QM = ALA 的 CB、HB1–3，边界 CB–CA（1 个 link），FakeBackend（假电荷数 = QM 原子数 + 1）：对 Q1、M1 的全部 6 个坐标在 Context 总能量上做中心差分，误差 < 1e-3 kJ/mol/nm |
+| `test_fd_two_links_disconnected_qm` | 二肽，QM = {ALA CB、HB1–3} ∪ {NME C、H1–3}，边界 CB–CA（C–C）与 NME C–N（C–N，两种默认比例都用到），QM 区不连通：对两个 Q1、两个 M1 的 12 个坐标做中心差分，误差 < 1e-3 kJ/mol/nm |
+| `test_boundary_bonded_terms_kept` | 单 link 体系：Q1–M1 键、HB–CB–CA 角、跨边界二面角的力常数不为 0；所有原子都在 QM 区的项为 0 |
+| `test_link_h_counted_in_electrons` | 单 link 体系，QM 请求元素 = C、H、H、H + 1 个 H（link）；`charge=0, multiplicity=1` 通过电子数检查，`multiplicity=2` 被拒绝 |
+| `test_oniom_unaffected` | 不传 `allowed_bonds` 时 `check_whole_molecules` 行为不变：ONIOM 的 model 区切断共价键仍报 `ValueError` |
 | `test_boundary_validation` | q1 不在 QM 区 / q1 与 m1 不成键 / 同一个 q1 出现两次 / 存在未声明的跨界键 → 全部 `ValueError` |
 | `test_default_ratio_unknown_pair` | O–S 组合 → `ValueError` |
 
-**完成标准：** 6 个用例通过。
+**完成标准：** 9 个用例通过，`tests/test_oniom.py` 无回归。
+
+> **Task 16 完成（2026-09-29）**：`tests/test_linkatoms.py` 10 个用例通过（另加 `test_explicit_link_ratios`）；fake 全套 105 passed，真实 ORCA 全套（非 slow）34 passed。
 
 ---
 
@@ -975,6 +984,8 @@ class ChargeShift:
 - 只修改传给 ORCA 的嵌入电荷。OpenMM 中 MM–MM 静电不变（spec §10.4）。
 - M1 没有 MM 邻居时抛 `ValueError`。
 - 修改后如果某个 M2 的电荷变为 0，它仍然保留在嵌入中（不要误删）。
+- `ChargeShift` 的 docstring 与 README 写明：这是**简化版** charge shift，不含文献方案（Sherwood 等）在 M2 附近补偿 M1–M2 键偶极的点电荷对（prep C3）；RCD 等列为以后。
+- **非整数 QM 电荷警告**（prep C2；**M5 起已改为按残基修正到 M2，见 spec §10.4 与 prep D3**）：`build_mixed_system` 计算 QM 原子在力场中的电荷和 Σq；若 |Σq − round(Σq)| > 0.05 e，发 `UserWarning` 并报告数值（嵌入电荷整体因此带非整数净电荷）。v0.3 不做修正（prep D3）。
 
 **测试用例：**
 
@@ -984,8 +995,12 @@ class ChargeShift:
 | `test_m1_removed_and_m2_shifted` | M1 不在返回的 mm_atoms 中；每个 M2 增加 q_M1 / n_M2 |
 | `test_m1_without_mm_neighbours` | 构造一个 M1 没有 MM 邻居的体系 → `ValueError` |
 | `test_openmm_mm_electrostatics_unchanged` | 改造后 System 的 MM–MM 静电能量与原 System 相同（QM 区平移到远处后比较） |
+| `test_noninteger_qm_charge_warns` | 二肽 QM = ALA 的 CA、HA、CB、HB1–3、C、O，边界 CA–N 与 C–N(NME)（Σq = +0.1438 e；不含 C、O 时 CA 要挂两个边界，违反 D2）→ `UserWarning`，信息含数值；QM = CB、HB1–3（Σq = −0.0016 e）→ 无警告 |
+| `test_zero_charge_m2_kept` | 直接调用 `ChargeShift.embedding_charges`：shift 后电荷恰为 0 的 M2、以及 shift 前电荷为 0（不在输入嵌入中）的 M2 都出现在输出中；输出按索引排序，总电荷守恒 |
 
-**完成标准：** 4 个用例通过。
+**完成标准：** 6 个用例通过。
+
+> **Task 17 完成（2026-09-29）**：`tests/test_charges.py` 6 个用例通过；`MixedSystemParts.mm_charges_e` 现为 shift 后的电荷；README 双语写明简化 charge shift 与非整数电荷警告。fake 全套 111 passed；真实 ORCA 的 QM/MM + ONIOM 测试在 `-W error::UserWarning` 下 8 passed（整分子 QM 区不触发新警告）。
 
 ---
 
@@ -996,17 +1011,20 @@ class ChargeShift:
 - 新建：`examples/link_atom_dipeptide.py`
 
 **要求：**
-- 体系：ACE-ALA-NME 二肽（OpenMM 自带的 `amber14-all.xml` 就有模板，不需要额外工具），真空，NoCutoff。QM = ALA 的 CA、HA、CB、HB1、HB2、HB3；边界为 CA–N 和 CA–C，共 2 个 link atom。QM 电荷为 0，多重度 1。方法 `HF/def2-SVP` 加 `TightSCF`。
+- 体系：`tests/data/ace_ala_nme.pdb` + `amber14-all.xml`，真空，NoCutoff。QM = ALA 的 CB、HB1、HB2、HB3（甲基侧链），边界 CB–CA，1 个 link atom；QM（含 link H，即甲烷）电荷 0，多重度 1。方法 `HF/def2-SVP` 加 `TightSCF`。（原方案 QM = CA、HA、CB、HB1–3 带 CA–N、CA–C 两个边界：两个边界共用 Q1 = CA，违反 Task 16 的校验，且 QM 区 MM 电荷和为 +0.114 e，prep C1。）
+- charge-shift 下 M1 = CA，M2 = N、C、HA。
 - 示例脚本：能量最小化后跑 200 步 NVT（Langevin，300 K，0.5 fs），打印每步耗时并检查 QM 区结构没有散架（CA–CB 距离保持在 0.14–0.17 nm）。
 
 **测试用例：**
 
 | 用例 | 期望 |
 |---|---|
-| `test_link_fd_boundary_atoms` | 对 CA、N、C 三个原子的全部 9 个坐标，在 Context 总能量上做中心差分（h = 1e-4 nm）：误差 < 0.5 kJ/mol/nm |
+| `test_link_fd_boundary_atoms` | 对 CB（Q1）、CA（M1）、N（M2）三个原子的全部 9 个坐标，在 Context 总能量上做中心差分（h = 1e-4 nm）：误差 < 0.5 kJ/mol/nm |
 | `test_link_translation_invariance` | 整体平移后能量变化 < 1e-7 Eh；‖Σ F‖ < 1e-3 × max‖F_i‖ |
 
 **完成标准：** 2 个用例通过，示例可以运行。**M4 完成，发布 v0.3。**
+
+> **Task 18 完成（2026-09-29）**：`tests/test_linkatoms_orca.py` 2 个用例通过（14 s）。实测：CB（Q1）、CA（M1）、N（M2）9 个坐标的有限差分误差最大 0.042 kJ/mol/nm（受力 300–870 kJ/mol/nm，阈值 0.5）；整体平移 1 nm 能量变化 5e-12 Eh，‖ΣF‖/max‖F_i‖ = 1.4e-10。示例 `examples/link_atom_dipeptide.py`：QM/MM 面上极小化 115 s，200 步 NVT 平均 720 ms/步（p95 1004 ms，ORCA 0.69 s），CA–CB 0.1491–0.1584 nm。版本号改为 0.3.0（pyproject、`__init__`、README 双语）。M4 之后的 slow 回归（2026-10-01）：`test_nve_drift`、`test_restart_trajectory_reproducible` 均通过。
 
 ---
 
@@ -1022,11 +1040,16 @@ class ChargeShift:
 
 **接口：**
 ```text
-qm_bond_graph(topology, qm_atoms) -> dict[int, list[int]]        # 只包含 QM 内部的键
+qm_bond_graph(topology, qm_atoms, boundary_pairs=()) -> dict[int, list[int]]
+    # QM 内部的键 + 声明的边界键：M1 作为挂在 Q1 上的叶子参与拼接（prep C7），
+    # 保证 link atom 用的 R_M1 与 R_Q1 在同一个镜像里；M1 不进入 QM 请求
 make_qm_whole(positions_nm: np.ndarray, qm_atoms: Sequence[int], graph: dict[int, list[int]],
               box_vectors_nm: np.ndarray) -> np.ndarray
-    # 返回 (n_qm, 3)：以 qm_atoms[0] 为锚点做 BFS，把每个原子平移到离已放置的邻居最近的镜像；
-    # 支持三斜盒（使用 OpenMM 约定的约化盒向量）
+    # 返回**全体粒子坐标的副本**（N, 3），其中图中的原子（QM 原子 + 边界 M1）被移到一致的镜像，
+    # 其余粒子不变——这样 LinkAtomManager.link_positions 可以直接用它（原计划返回 (n_qm, 3)，
+    # 拿不到拼接后的 M1，2026-09-29 改）。每个连通分量以其在 qm_atoms 中的第一个原子为锚点做 BFS，
+    # 把每个原子平移到离已放置邻居最近的镜像；支持三斜盒（OpenMM 约化盒向量）
+minimum_image(displacement, box_vectors_nm) -> np.ndarray     # c、b、a 顺序约化
 ```
 
 **测试用例：**
@@ -1036,9 +1059,14 @@ make_qm_whole(positions_nm: np.ndarray, qm_atoms: Sequence[int], graph: dict[int
 | `test_whole_molecule_unchanged` | 分子本来就完整时，输出与输入相同 |
 | `test_split_across_x_boundary` | 盒长 3 nm 的正交盒，水分子的一个 H 被包裹到盒的另一侧 → 拼回后键长恢复为 0.09572 nm |
 | `test_triclinic_box` | 截角八面体盒中跨边界的分子 → 键长恢复 |
+| `test_boundary_m1_imaged_with_q1` | 二肽放进 2 nm 正交盒，把 M1（CA）的坐标整体平移一个盒长：拼接后 Q1–M1 距离恢复为原键长，link 位置与未平移时相同 |
 | `test_disconnected_qm_region` | QM 区由两个互不成键的分子组成：每个连通分量各自以其第一个原子为锚点；两个分量之间取最近镜像（相对于第一个分量的锚点） |
 
-**完成标准：** 4 个用例通过。
+**完成标准：** 5 个用例通过。
+
+> **Task 19 完成（2026-10-01）**：`openmmorca/qmmm/imaging.py`，`tests/test_imaging.py` 5 个用例通过；把 `minimum_image` 换成恒等映射后 4 个拼接用例失败（测试非空转）。
+
+> 实测（prep F2）：周期体系中 PythonForce 回调收到的坐标不做包裹（Reference/CPU/CUDA 相同）。初始结构分子完整时 QM 区在 MD 中一直完整；本任务主要防的是输入结构按原子包裹。
 
 ---
 
@@ -1052,7 +1080,8 @@ make_qm_whole(positions_nm: np.ndarray, qm_atoms: Sequence[int], graph: dict[int
 ```text
 class CutoffEmbedding:
     def __init__(self, groups: Sequence[tuple[int, ...]], charges_e: np.ndarray, cutoff_nm: float = 1.2)
-        # groups：每个残基中带电 MM 原子的索引；charges_e：按 OpenMM 粒子索引排列的全体电荷
+        # groups：每个残基中带电 MM 原子的索引；charges_e：按 OpenMM 粒子索引排列的全体电荷，
+        # **已经过 charge-shift**（prep C8）：M1 的电荷为 0 且 M1 不出现在任何组里，M2 带 shift 后的电荷
     def select(self, qm_positions_nm: np.ndarray, positions_nm: np.ndarray, box_vectors_nm: np.ndarray
                ) -> tuple[np.ndarray, np.ndarray, np.ndarray]
         # 返回 (选中的 OpenMM 索引, 最小镜像后的坐标, 电荷)。
@@ -1061,7 +1090,13 @@ class CutoffEmbedding:
     last_n_groups: int                  # 最近一次选中的组数
     last_changed: int                   # 与上一步相比，进入和离开的组数之和
 groups_from_topology(topology, mm_atoms) -> list[tuple[int, ...]]   # 默认按残基分组
+perpendicular_widths(box_vectors_nm) -> np.ndarray                    # 三个面间距
+check_cutoff_against_box(cutoff_nm, box_vectors_nm, qm_extent_nm=0.0) -> None
+    # cutoff + D ≥ 最短面间距 / 2 → ValueError。构造函数拿不到盒子，所以"构造期"校验由
+    # Task 21 在 createMixedSystem 中用默认盒向量调用；select() 每步带 D 调用（2026-10-01 改）
 ```
+
+选组：每个原子相对 QM 锚点（qm_positions[0]）取最小镜像后，与任一 QM 原子距离 < cutoff 即选中整组；被选中的组先按组内第一个原子拼回完整，再整体放到组内离 QM 区最近的那个原子的镜像上。
 
 **测试用例：**
 
@@ -1071,9 +1106,12 @@ groups_from_topology(topology, mm_atoms) -> list[tuple[int, ...]]   # 默认按�
 | `test_minimum_image_positions` | QM 在盒的左边缘、MM 水在右边缘 → 返回的坐标是左侧的镜像，组内三个原子的相对几何不变 |
 | `test_cutoff_excludes_far_groups` | 距离 2 nm 的组不被选中 |
 | `test_change_counter` | 连续两次 select 之间把一个组移出截断 → `last_changed == 1` |
-| `test_cutoff_larger_than_half_box_rejected` | cutoff ≥ 最短盒长的一半 → `ValueError` |
+| `test_cutoff_larger_than_half_box_rejected` | 构造期：cutoff ≥ 最短盒宽的一半（三斜盒用垂直宽度）→ `ValueError` |
+| `test_cutoff_plus_qm_extent_rejected` | 每步：cutoff + D ≥ 最短盒宽的一半（D = QM 原子间最大距离；NPT 下盒子会变，所以每步查）→ `ValueError`（prep C9） |
 
-**完成标准：** 5 个用例通过。
+**完成标准：** 6 个用例通过。
+
+> **Task 20 完成（2026-10-01）**：`openmmorca/qmmm/embedding.py`，`tests/test_embedding.py` 8 个用例通过（另加 `test_groups_from_topology`、`test_invalid_groups_rejected`）。DhlA 交叉检验（2DHC 溶剂化体系 31,610 原子，方案 C 的 61 个真实 QM 原子，cutoff 1.2 nm）：选中 221 组 / 2,601 个原子，与 prep §5 的独立估计（221 组 / 2,597，后者剔除了 4 个 M1）一致；单次 `select()` 87 ms。
 
 ---
 
@@ -1088,7 +1126,8 @@ groups_from_topology(topology, mm_atoms) -> list[tuple[int, ...]]   # 默认按�
 ORCAPotential.createMixedSystem(..., embeddingCutoff: openmm.unit.Quantity = 1.2 * nanometer)
 QMMMCallback.__init__(..., embedding: CutoffEmbedding | None = None, qm_graph: dict | None = None)
     # 有 embedding 时：PythonForce.setUsesPeriodicBoundaryConditions(True)；
-    # 从 state.getPeriodicBoxVectors() 读盒向量 → make_qm_whole → embedding.select → 构造请求；
+    # 从 state.getPeriodicBoxVectors() 读盒向量 → make_qm_whole（含 M1，prep C7）→ link 位置
+    # → embedding.select → 构造请求；
     # 力按原始 OpenMM 索引回填（平移不改变力）
 ```
 
@@ -1105,8 +1144,17 @@ QMMMCallback.__init__(..., embedding: CutoffEmbedding | None = None, qm_graph: d
 | `test_qm_split_across_boundary` | 把 QM 水放在盒的角上，使它被 OpenMM 包裹拆开：FakeBackend 收到的是完整分子（键长正确） |
 | `test_embedding_counts_logged` | timings 中有 `n_embed_groups` 列，且数值 > 0 |
 | `test_cutoff_periodic_rejected` | NonbondedForce 使用 `CutoffPeriodic` → `ValueError` |
+| `test_charge_shift_with_cutoff_embedding` | 周期二肽（溶剂化）+ link atom：嵌入电荷中没有 M1，M2 的电荷是 shift 后的值，M2 所在组总被选中（prep C8） |
+| `test_barostat_extra_evaluations` | 加 `MonteCarloBarostat`（频率 5），跑 50 步：FakeBackend 调用次数 = 50 + 2 × 10（prep F3：每次尝试多 2 次 QM 调用）；README 已知限制写明 NPT 的额外开销 |
 
-**完成标准：** 4 个用例通过。
+**完成标准：** 6 个用例通过。
+
+> **Task 21 完成（2026-10-01）**：`tests/test_periodic_fake.py` 8 个用例通过（另加 `test_embedding_cutoff_checked_against_box`、`test_nonperiodic_unchanged`）；新增真实 ORCA 用例 `tests/test_periodic_orca.py`（2.5 nm 水盒、QM 水 HF/STO-3G：整体平移一个晶格矢量、单个 QM H 被包裹到盒子另一侧，能量都不变 < 1e-7 Eh；timings 的 `n_embed_groups` > 0，首步 `embed_changed` = 组数、之后为 0）。实现要点：
+> - 嵌入组数经 `QMRequest.diagnostics`（新字段，默认空 dict，不影响结果）传给后端，ORCA 后端写进 timings 的 `n_embed_groups`、`embed_changed` 两列；backend 仍不 import openmm。
+> - `build_mixed_system` 去掉周期性 `NotImplementedError`，改为要求 PME / LJPME / Ewald（`CutoffPeriodic` → `ValueError`）；`tests/test_qmmm_system.py::test_periodic_not_yet_supported` 相应改为 `test_periodic_requires_pme_or_ewald`。
+> - `createMixedSystem` 构造期用默认盒向量调用 `check_cutoff_against_box`；`make_python_force(periodic=...)`。
+> - `test_barostat_extra_evaluations` 用 3 nm 盒：fake 水的弹簧很软（k = 1000），300 K 下 QM 区尺寸长到 0.26 nm，2.5 nm 盒会触发每步的 cutoff + D 校验（校验本身工作正常）。
+> - 回归：fake 全套 132 passed；真实 ORCA 的 restart / QM/MM / ONIOM / link atom / backend 测试 23 passed。
 
 ---
 
@@ -1117,17 +1165,28 @@ QMMMCallback.__init__(..., embedding: CutoffEmbedding | None = None, qm_graph: d
 - 修改：spec §2.2（追加实测耗时）、spec §15
 
 **要求：**
-- 使用 M4 开始前确定的酶体系：溶剂化、PBC、PME、link atom、截断嵌入。方法由应用负责人参照 Task 14 的基准结果选定。
+- 体系：DhlA，起始结构 **PDB 2DHC**（DCE 米氏复合物；不是 2HAD），准备流程、QM 区方案与坑见 `docs/plans/2026-09-29-m4-m5-prep.md` §5。溶剂化、PBC、PME、link atom、截断嵌入。QM 区：验收用方案 A（DCE + Asp124 侧链，15 原子，1 个 link，电荷 −1），应用用方案 C（再加 Trp125、Trp175、His289 侧链，65 原子，4 个 link）。方法由应用负责人参照 Task 14 的基准结果选定。
+- `examples/data/` 只放原始 `2DHC.pdb`（约 200 KB），溶剂化体系由脚本现场生成（31,610 原子，不入库）；脚本显式指定 His289 = HID，按几何选 Asp124 亲核氧（OD1/OD2 命名在条目间对调）；GAFF2/AM1-BCC 需要 AmberTools 在 PATH 上。
 - 流程：MM 平衡（由应用方提供，或在脚本中用纯 MM 完成）→ QM/MM 能量最小化 → 1 ps NVT（Langevin，300 K，0.5 fs）。
 - 输出：每步耗时拆分（write/orca/read）、嵌入组数、`n_fresh_retries`、每 10 步一帧 DCD 轨迹。
 - 验收：跑满 1 ps 无人工干预；最后 500 步的温度均值在 300 ± 10 K；QM 区中每个共价键长偏离初始值不超过 20%。
 
 **步骤：**
-- [ ] 与应用方确认体系文件和 QM 区选择，写入 `examples/enzyme_qmmm.py` 开头的注释
-- [ ] 先用 xTB 跑 200 步冒烟，确认流程能走通，再切换到正式方法
-- [ ] 跑满 1 ps，把耗时统计贴进 spec §2.2，把体系描述写进 spec §15
+- [x] 确定体系文件和 QM 区选择（2026-09-29：2DHC，方案 A / C，见 prep §5），写入 `examples/enzyme_qmmm.py` 开头的注释
+- [x] 先用 xTB 跑 200 步冒烟，确认流程能走通，再切换到正式方法
+- [x] 跑满 1 ps，把耗时统计贴进 spec §2.2，把体系描述写进 spec §15
 
 **完成标准：** 满足上述验收条件。**M5 完成，发布 v0.4。**
+
+> **Task 22 进展（2026-10-01）**：
+> - `examples/enzyme_qmmm.py` + `examples/data/2DHC.pdb`。DCE 全在 QM 区，其力场参数只影响 MM 平衡，所以用 OpenFF Sage 2.2 + NAGL 电荷（不需要 AmberTools；原 GAFF2/AM1-BCC 方案需要 antechamber）。
+> - 两处流程修正：①不做全体系 QM/MM 极小化，直接从 MM 平衡的坐标**和速度**起跑——极小化 31,610 原子会抽干热势能，新赋的 300 K 速度在 ~50 fs 内均分到 ~170 K，1/ps 的恒温器 1 ps 内拉不回来，验收必挂（实测）；②每步只取坐标和速度、用速度算温度——`getState(getEnergy=True)` 会重算全部力，每步多一次 QM 调用（实测 2 次/步，0.54 → 0.30 s/步）。
+> - xTB 冒烟（方案 A，200 步）：PASS，最后 200 步 298.1 ± 3.4 K，QM 键最大偏离 9.6%，t_orca 0.21 s，0.30 s/步，嵌入 151 组（25 步有进出），0 次 fresh 重试。
+> - 方案 A 正式方法单步耗时（~1,800 个嵌入点电荷是主要开销）：HF-3c 3.0 s，HF/def2-SVP 15.4 s，r2SCAN-3c 17.9 s，B3LYP-D3BJ/def2-SVP 34.6 s（均单核）；r2SCAN-3c 16 核 5.4 s、32 核 4.8 s。
+> - 正式跑：r2SCAN-3c，40 核（`PRTE_MCA_hwloc_default_cpu_list=0-39`），2000 步，`setsid` 脱离会话，输出 `/home/kasuga/openmm-orca-runs/dhla_r2scan3c_np40/`。
+> - **验收 PASS（2026-10-01 22:18）**：DhlA（PDB 2DHC，31,610 原子，PME），QM 方案 A（DCE + Asp124 侧链，15 原子含 1 个 link H，电荷 −1），r2SCAN-3c，40 个 MPI 进程，Langevin NVT 300 K、0.5 fs：2000 步（1 ps）无人工干预，5.53 s/步（ORCA 5.45 s；写 0.009 s、读 0.012 s），平均嵌入 152 个残基组（约 1,800 个点电荷），286 步有组进出截断，0 次 fresh SCF 重试；最后 500 步 298.6 ± 1.1 K；QM 键最大偏离 15.9%（来自 C1–Cl1：第 ~1907 步 O–C1 一度靠近到 0.232 nm 的 SN2 进攻尝试，随后回弹）。
+> - 观察：DhlA 的 C1–Cl1 正是反应坐标，"QM 键偏离 ≤ 20%"这条验收对反应体系会误判（本次 15.9% 就来自它）。以后做反应模拟时，应把反应键从这条检查里排除、单独监控。
+> - 版本号改为 0.4.0（pyproject、`__init__`、README 双语、CHANGELOG）。
 
 ---
 
