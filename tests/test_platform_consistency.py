@@ -107,7 +107,7 @@ def test_cuda_matches_reference(case):
     np.testing.assert_allclose(gpu["qm"][1], forces, rtol=0, atol=1e-9 * scale)
 
     # Whole system, including the platforms' own MM kernels. Measured on an
-    # RTX 2080 Ti / OpenMM 8.5.2: energy up to 5.8e-6 relative (PME) and
+    # Measured on a consumer CUDA GPU (OpenMM 8.5.2): energy up to 5.8e-6 relative (PME) and
     # forces up to 3.5e-6 of the largest force; the QM group above agrees to
     # better than 1e-12.
     energy, forces = reference["total"]

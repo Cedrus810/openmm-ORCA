@@ -1,6 +1,6 @@
 """Full-QM water NVE demo: OpenMM drives MD, ORCA computes the water molecule.
 
-Run with the openmm_dev environment and OPI_ORCA set:
+Run with OPI_ORCA set:
 
     export OPI_ORCA=/path/to/orca
     python examples/full_qm_water.py
