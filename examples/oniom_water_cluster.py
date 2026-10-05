@@ -6,13 +6,13 @@ with HF/STO-3G on water 0 (model region) and xTB on the whole 5-water cluster
 particle container driven by the ONIOM PythonForce.
 
     export OPI_ORCA=/home/ruigengji/ORCA611
-    /home/ruigengji/miniforge3/envs/openmm_dev/bin/python examples/oniom_water_cluster.py [csv_path]
+    /home/ruigengji/miniforge3/envs/openmm_dev/bin/python examples/oniom_water_cluster.py [csv_path] [--steps 4000]
 """
 
 from __future__ import annotations
 
+import argparse
 import csv
-import sys
 import time
 from pathlib import Path
 
@@ -90,6 +90,10 @@ def run_nve(n_steps: int = 400, report_every: int = 10, csv_path: Path | None = 
 
 
 if __name__ == "__main__":
-    csv_out = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("oniom_cluster.csv")
-    drift, scatter = run_nve(csv_path=csv_out)
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("csv_path", nargs="?", default="oniom_cluster.csv")
+    parser.add_argument("--steps", type=int, default=400, help="0.25 fs steps (4000 = 1 ps)")
+    args = parser.parse_args()
+    csv_out = Path(args.csv_path)
+    drift, scatter = run_nve(n_steps=args.steps, csv_path=csv_out)
     print(f"\nCSV written to {csv_out}")

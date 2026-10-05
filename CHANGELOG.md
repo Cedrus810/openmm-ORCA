@@ -16,6 +16,7 @@ Versions follow the milestones of `docs/plans/2026-09-26-openmm-orca-implementat
   - `steps.csv` is flushed every step; it gains `scf_cycles`, `restart_used` and `fresh_retries` columns.
   - Periodic OpenMM checkpoints and State XML are committed in `run.json`, which records the status, every attempt and its provenance (versions, host, command, git commit, `OPI_ORCA`). Each run writes `final_state.xml` and `final.pdb`.
   - `--resume checkpoint|state` with run-identity and CSV-prefix checks, and `--archive-existing`. Fresh runs never overwrite earlier run products; the output directory is locked.
+- `examples/analyze_nve.py`: recomputes NVE drift/std and restart differences from evidence CSVs written by the slow tests (`OPENMMORCA_EVIDENCE_DIR`) and `examples/oniom_water_cluster.py --steps`.
 - `examples/analyze_enzyme_run.py`: recomputes a run from its products, including an independent DCD bond check, and compares the Task 22 verdict with `acceptance.json`. `--legacy-region` reads runs from before `run.json`.
 - Tests: `tests/test_platform_consistency.py` (CUDA vs Reference), `tests/test_packaging.py` (version consistency).
 
@@ -24,14 +25,14 @@ Versions follow the milestones of `docs/plans/2026-09-26-openmm-orca-implementat
 - The version is single-sourced from `openmmorca.__version__`; the build requires `setuptools>=77` (PEP 639 license string).
 
 ### Verification (2026-10-05)
-- Quick regression: **224 passed**, no skips (MPI tests run on the host; CUDA tests on an RTX 2080 Ti).
-- Slow tests: 2 passed (1 ps NVE drift; restart on/off, 50 steps).
+- Quick regression: **226 passed**, no skips (MPI tests run on the host; CUDA tests on an RTX 2080 Ti).
+- Slow tests: 2 passed (1 ps NVE drift; restart on/off, 50 steps). Raw evidence in `/home/kasuga/openmm-orca-runs/t06_evidence_2026-10-05/`, recomputed with `examples/analyze_nve.py`: QM/MM NVE +0.0056 kJ/mol/ps, std 0.0163 kJ/mol; ONIOM NVE (1 ps) +0.0067, 0.0231; restart max difference 3.9e-8 Eh. Same values as the 2026-09-27/29 records.
 - Clean-venv wheel (OpenMM 8.6.1): 179 non-ORCA tests passed.
 - DhlA Task 22, recomputed from products with `analyze_enzyme_run.py`:
   - 2026-10-01 run (`/home/kasuga/openmm-orca-runs/dhla_r2scan3c_np40/`): PASS, 298.6 ± 1.1 K, max QM bond deviation 15.9 %.
   - 2026-10-05 run with current code (`/home/kasuga/openmm-orca-runs/dhla_r2scan3c_np32_2026-10-05/`): PASS, 298.6 ± 1.4 K, 17.3 %.
 - Checkpoint resume reproduces an uninterrupted run exactly with a deterministic backend on Reference. It has not been exercised with ORCA.
-- Records (Chinese): [P1 fixes](docs/validation/2026-10-04-priority-fixes.md), [T04/T05](docs/validation/2026-10-05-t04-t05.md), [DhlA](docs/validation/2026-10-05-t06-dhla-recompute.md).
+- Records (Chinese): [P1 fixes](docs/validation/2026-10-04-priority-fixes.md), [T04/T05](docs/validation/2026-10-05-t04-t05.md), [T06/T07 evidence](docs/validation/2026-10-05-t06-dhla-recompute.md).
 
 ## 0.4.0 — 2026-10-01 (M5: periodic MM + cutoff embedding)
 

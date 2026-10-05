@@ -34,6 +34,8 @@ cd /home/ruigengji/ORCA611 && cp -a lib datasets $D/ && ls | grep -v -e '^autoci
 export OPI_ORCA=$D
 ```
 
+kasuga01 本地已装有同一 ORCA 6.1.1 构建：`/home/kasuga/orca_6_1_1_linux_x86-64_shared_openmpi418_avx2`，`OPI_ORCA` 直接指向它即可，无需复制。运行产物放在持久的本地盘（如 `/home/kasuga/openmm-orca-runs/`），不要放 `/tmp`。
+
 OpenMPI 的 `mpirun` 不理会 `taskset`，总是从 0 号核开始绑定。要把并行 ORCA 限定在指定核上（比如和别的任务共用机器时），设 `PRTE_MCA_hwloc_default_cpu_list=4-35`。
 
 ## 最小示例
@@ -88,7 +90,7 @@ system = oniom.createONIOMSystem(topology, atoms=[0, 1, 2], forceGroup=0)
 
 能量是标准减法组合 `E_high(model) + E_low(full) − E_low(model)`；层间机械耦合（QM 层之间不加点电荷嵌入）、model 区必须整分子、System 不含力场项。每步 3 次 QM 调用（1 高 2 低），走 3 个独立 backend，各 restart 链尺寸自洽。`high` 的 charge/multiplicity 描述 model 区，`low` 的描述全体系；低层 model 区计算使用 `high` 的 charge/multiplicity，因此 low-only 原子可以带电或开壳层。每次 `createONIOMSystem` 都会新建这 3 个 backend；`oniom.summarize_timings()` / `oniom.close()` 汇总两层。
 
-QM/MM 团簇 NVE（1 ps，验证能量守恒）：`examples/qmmm_water_cluster_nve.py`；ONIOM 对应版本：`examples/oniom_water_cluster.py`；link atom 二肽 NVT：`examples/link_atom_dipeptide.py`。
+QM/MM 团簇 NVE（1 ps，验证能量守恒）：`examples/qmmm_water_cluster_nve.py`；ONIOM 对应版本：`examples/oniom_water_cluster.py`（默认 400 步 = 0.1 ps，`--steps 4000` 为 1 ps）；link atom 二肽 NVT：`examples/link_atom_dipeptide.py`。`examples/analyze_nve.py DIR` 从 `DIR` 中的证据 CSV（见“运行测试”）重算 NVE 漂移／标准差与 restart 重现性差值，写出带输入哈希的 `summary.json`。
 
 酶示例少于 2000 步（1 ps）时只报告冒烟检查，`Task 22 acceptance` 为 `NOT_EVALUATED`；单步运行也可正常汇总。`--reaction-bond I J` 用零起始 OpenMM 原子索引显式指定单独监控的反应键，可重复指定；稳定性检查针对其余 QM 键，原 Task 22 的全 QM 键门槛仍单独报告。退出码对应冒烟／所配置的稳定性检查，完整验收结果见 `acceptance.json`。`steps.csv` 每步写入，失败时保留已完成行并关闭后端。
 
@@ -145,6 +147,7 @@ cd <scratch>/failures/failure_step_000123 && $OPI_ORCA/orca qm.inp > rerun.out
 - NPT 下 `MonteCarloBarostat` 每次尝试额外触发 2 次 QM 计算（默认频率 25 时 QM 开销 +8%）。
 - 嵌入电荷走 `%pointcharges` 文件；禁止 inline `Q`（会重复计算 MM–MM 静电且无 pcgrad）。
 - SCF 失败绝不返回旧力：重试失败即硬报错并停 MD。
+- 酶示例的 checkpoint 续跑只在确定性后端、Reference 平台上验证过逐位一致；尚未实际续跑过中断的 ORCA 运行。续跑首步为 fresh SCF 初猜，ORCA 续跑轨迹只在 SCF 收敛精度内与不中断运行一致。
 
 ## 运行测试
 
@@ -152,10 +155,17 @@ cd <scratch>/failures/failure_step_000123 && $OPI_ORCA/orca qm.inp > rerun.out
 export OPI_ORCA=/home/ruigengji/ORCA611
 $PY -m pytest                    # 默认：单元测试 + 快速 ORCA 测试（不含 slow）
 $PY -m pytest -m orca -v         # 只跑需要 ORCA 的测试
-$PY -m pytest -m slow -v         # NVE（约 25 分钟）、restart 重现性等长测试
+$PY -m pytest -m slow -v         # NVE 与 restart 重现性（kasuga01 上约 36 分钟）
+
+# 保存 slow 测试的机器可读证据（T06），再重算：
+OPENMMORCA_EVIDENCE_DIR=$DIR $PY -m pytest -m slow -v     # 写 qmmm_nve.csv、restart.csv
+$PY examples/oniom_water_cluster.py $DIR/oniom_nve.csv --steps 4000
+$PY examples/analyze_nve.py $DIR
 ```
 
-没有 ORCA 时 `orca` 标记的测试自动跳过（注意：桌面 Linux 上 `/usr/bin/orca` 可能是屏幕阅读器，conftest 只认 ELF 二进制）。
+没有 ORCA 时 `orca` 标记的测试自动跳过（注意：桌面 Linux 上 `/usr/bin/orca` 可能是屏幕阅读器，conftest 只认 ELF 二进制）。`tests/test_platform_consistency.py` 在双精度 CUDA 与 Reference 之间对照 link atom、周期镜像与虚拟位点，无可用 CUDA 设备时跳过。`tests/test_packaging.py` 在安装元数据过期时失败，用 `pip install -e . --no-deps` 修复。`examples/analyze_enzyme_run.py` 的 DCD 核对需要 mdtraj，未安装时跳过该项。
+
+当前验证状态与证据：[TODO.md](TODO.md)（状态表）与 [docs/validation/](docs/validation/)。
 
 ## 致谢
 

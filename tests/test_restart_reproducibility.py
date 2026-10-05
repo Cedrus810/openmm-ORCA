@@ -2,10 +2,15 @@
 
 50 NVE steps from one shared initial state (positions and velocities); per-step potential energies
 must agree to < 1e-6 Eh between the MORead-restart run and the fresh-SCF run.
-Roughly one minute of ORCA.
+Roughly one minute of ORCA. With OPENMMORCA_EVIDENCE_DIR set, both energy
+series are written to restart.csv there (T06).
 """
 
 from __future__ import annotations
+
+import csv
+import os
+from pathlib import Path
 
 import numpy as np
 import openmm as mm
@@ -72,5 +77,11 @@ def test_restart_trajectory_reproducible(tmp_path):
     start = initial_state()
     with_restart = run_trajectory(tmp_path / "on", restart=True, start=start)
     without_restart = run_trajectory(tmp_path / "off", restart=False, start=start)
+    evidence = os.environ.get("OPENMMORCA_EVIDENCE_DIR")
+    if evidence:
+        with open(Path(evidence) / "restart.csv", "w", newline="") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(["step", "restart_eh", "fresh_eh"])
+            writer.writerows((step, a, b) for step, (a, b) in enumerate(zip(with_restart, without_restart)))
     for step, (a, b) in enumerate(zip(with_restart, without_restart)):
         assert abs(a - b) < 1e-6, f"step {step}: {a} vs {b} Eh differ by {abs(a - b):.2e}"

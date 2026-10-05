@@ -9,4 +9,5 @@ dist/
 
 # 运行产物
 nve_cluster.csv
+oniom_cluster.csv
 *.dcd

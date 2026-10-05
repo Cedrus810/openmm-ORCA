@@ -34,6 +34,8 @@ cd /home/ruigengji/ORCA611 && cp -a lib datasets $D/ && ls | grep -v -e '^autoci
 export OPI_ORCA=$D
 ```
 
+On kasuga01 a local copy of the same ORCA 6.1.1 build is already installed at `/home/kasuga/orca_6_1_1_linux_x86-64_shared_openmpi418_avx2`; point `OPI_ORCA` there instead of copying. Keep run outputs on a persistent local disk (e.g. `/home/kasuga/openmm-orca-runs/`), not in `/tmp`.
+
 OpenMPI's `mpirun` ignores the caller's `taskset` affinity and always binds processes starting from core 0. To pin parallel ORCA to specific cores (e.g. when sharing the machine with other jobs), set `PRTE_MCA_hwloc_default_cpu_list=4-35`.
 
 ## Minimal example
@@ -88,7 +90,7 @@ system = oniom.createONIOMSystem(topology, atoms=[0, 1, 2], forceGroup=0)
 
 The energy is the standard subtractive combination `E_high(model) + E_low(full) − E_low(model)`; layers couple mechanically (no point-charge embedding between QM layers), the model region must be whole molecules, and the System carries no force-field terms. Each step costs three QM evaluations (one high, two low) through three independent backends, so every restart chain stays correctly sized. `high`'s charge/multiplicity describe the model region, `low`'s the full system; the low-level model-region evaluation uses `high`'s charge/multiplicity, so the low-layer-only atoms may be charged or open-shell. Every `createONIOMSystem` call creates those three backends; `oniom.summarize_timings()` / `oniom.close()` aggregate over both layers.
 
-QM/MM water-cluster NVE (1 ps, energy-conservation check): `examples/qmmm_water_cluster_nve.py`; ONIOM counterpart: `examples/oniom_water_cluster.py`; link-atom dipeptide NVT: `examples/link_atom_dipeptide.py`.
+QM/MM water-cluster NVE (1 ps, energy-conservation check): `examples/qmmm_water_cluster_nve.py`; ONIOM counterpart: `examples/oniom_water_cluster.py` (default 400 steps = 0.1 ps; `--steps 4000` for 1 ps); link-atom dipeptide NVT: `examples/link_atom_dipeptide.py`. `examples/analyze_nve.py DIR` recomputes NVE drift/std and restart-reproducibility differences from the evidence CSVs in `DIR` (see Running the tests) and writes `summary.json` with input hashes.
 
 Enzyme runs shorter than 2000 steps (1 ps) report smoke checks and `Task 22 acceptance: NOT_EVALUATED`; a single step is supported. Repeat `--reaction-bond I J` to monitor reactive bonds separately using zero-based OpenMM atom indices. Configured stability checks use the remaining QM bonds; the original Task 22 all-bond gate is still reported separately. The exit code follows the smoke/configured stability checks; full acceptance is recorded in `acceptance.json`. Each `steps.csv` row is flushed during the run; failures retain completed rows and close the backend.
 
@@ -145,6 +147,7 @@ cd <scratch>/failures/failure_step_000123 && $OPI_ORCA/orca qm.inp > rerun.out
 - Under NPT, each `MonteCarloBarostat` attempt triggers two extra QM evaluations (+8% QM cost at the default frequency of 25).
 - Embedding charges go through a `%pointcharges` file; inline `Q` is forbidden (it double-counts MM–MM electrostatics and yields no pcgrad).
 - Stale forces are never returned on SCF failure: when retries fail, it hard-errors and stops the MD.
+- Enzyme-example checkpoint resume is verified bit for bit only with a deterministic backend on Reference. An interrupted ORCA run has not yet been resumed in practice. The first resumed step starts from a fresh SCF guess, so a resumed ORCA trajectory matches the uninterrupted one only within SCF convergence.
 
 ## Running the tests
 
@@ -152,10 +155,17 @@ cd <scratch>/failures/failure_step_000123 && $OPI_ORCA/orca qm.inp > rerun.out
 export OPI_ORCA=/home/ruigengji/ORCA611
 $PY -m pytest                    # default: unit tests + fast ORCA tests (no slow)
 $PY -m pytest -m orca -v         # only tests that need ORCA
-$PY -m pytest -m slow -v         # NVE (~25 min), restart reproducibility and other long tests
+$PY -m pytest -m slow -v         # NVE and restart reproducibility (~36 min on kasuga01)
+
+# Keep machine-readable evidence of the slow tests (T06), then recompute it:
+OPENMMORCA_EVIDENCE_DIR=$DIR $PY -m pytest -m slow -v     # writes qmmm_nve.csv, restart.csv
+$PY examples/oniom_water_cluster.py $DIR/oniom_nve.csv --steps 4000
+$PY examples/analyze_nve.py $DIR
 ```
 
-Without ORCA, `orca`-marked tests are skipped automatically (note: on desktop Linux `/usr/bin/orca` may be the screen reader; conftest only accepts an ELF binary).
+Without ORCA, `orca`-marked tests are skipped automatically (note: on desktop Linux `/usr/bin/orca` may be the screen reader; conftest only accepts an ELF binary). `tests/test_platform_consistency.py` compares CUDA (double precision) with Reference for link atoms, periodic imaging and virtual sites, and is skipped without a usable CUDA device. `tests/test_packaging.py` fails when the installed metadata is stale; fix it with `pip install -e . --no-deps`. `examples/analyze_enzyme_run.py` needs mdtraj for its DCD check, and otherwise skips that check.
+
+Current verification status and evidence: [TODO.md](TODO.md) (status table) and [docs/validation/](docs/validation/).
 
 ## Acknowledgments
 

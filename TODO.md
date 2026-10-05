@@ -9,19 +9,20 @@ P1 优先修复已确认的使用问题；P2 补齐可复现性、验证与维�
 | 项目 | 状态 |
 |---|---|
 | T01–T05 | 完成 |
-| T06 | DhlA 部分完成；NVE／ONIOM／restart 原始证据待归档 |
-| T07 | MPI、slow 测试、CUDA 对照完成；ONIOM NVE 机器可读结果待做；ORCA 上的中断续跑未实测 |
+| T06 | 完成 |
+| T07 | 完成；ORCA 上的中断续跑未实测 |
 | T08–T16 | 未开始 |
 
 | 验证 | 结果 |
 |---|---|
-| 快速回归（`-m 'not slow'`，本地 ORCA 6.1.1） | 224 通过，无跳过（含 5 个 MPI、3 个 CUDA 用例） |
-| slow 测试 | 2 通过（NVE 漂移；restart 开／关 50 步），38 min |
+| 快速回归（`-m 'not slow'`，本地 ORCA 6.1.1） | 226 通过，无跳过（含 5 个 MPI、3 个 CUDA 用例） |
+| slow 测试 | 2 通过（NVE 漂移；restart 开／关 50 步） |
+| NVE／restart 原始证据（`/home/kasuga/openmm-orca-runs/t06_evidence_2026-10-05/`） | QM/MM NVE +0.0056 kJ/mol/ps、0.0163；ONIOM NVE +0.0067、0.0231；restart 最大差 3.9e-8 Eh |
 | 干净 venv 安装 wheel（OpenMM 8.6.1） | 非 ORCA 测试 179 通过 |
 | DhlA 2026-10-01 运行（`/home/kasuga/openmm-orca-runs/dhla_r2scan3c_np40/`） | 从产物重算 PASS：298.6 ± 1.1 K，键偏离 15.9% |
 | DhlA 2026-10-05 当前代码运行（`/home/kasuga/openmm-orca-runs/dhla_r2scan3c_np32_2026-10-05/`） | 从产物重算 PASS：298.6 ± 1.4 K，键偏离 17.3% |
 
-验证记录：[P1 修复](docs/validation/2026-10-04-priority-fixes.md)，[T04／T05](docs/validation/2026-10-05-t04-t05.md)，[DhlA 重算与新运行](docs/validation/2026-10-05-t06-dhla-recompute.md)。
+验证记录：[P1 修复](docs/validation/2026-10-04-priority-fixes.md)，[T04／T05](docs/validation/2026-10-05-t04-t05.md)，[T06／T07 运行证据](docs/validation/2026-10-05-t06-dhla-recompute.md)。
 
 ## 当前已有的能力
 
@@ -79,8 +80,8 @@ P1 优先修复已确认的使用问题；P2 补齐可复现性、验证与维�
 
 - [x] 定位 DhlA 原始 `steps.csv`、轨迹、准备结构、平衡 State、计时日志及完整命令；记录产物位置、哈希、提交、软件版本、硬件、QM 原子/边界、电荷/多重度、cutoff、步长与种子。2026-10-01 的产物位于 `/home/kasuga/openmm-orca-runs/dhla_r2scan3c_np40/`。新运行的 `run.json` 已自动记录运行身份（起始 State、拓扑、MM System 哈希、QM 原子／边界、电荷／多重度、cutoff、步长、种子）、各次尝试及其环境（软件版本、主机、CPU 数、命令行、git 提交与是否有未提交改动、`OPI_ORCA`）。 原始产物哈希与重算见 [DhlA 重算记录](docs/validation/2026-10-05-t06-dhla-recompute.md)；该运行未记录提交号与种子（早于 `run.json`）。
 - [x] 用独立分析脚本从产物重算运行长度、温度、键偏离、嵌入组变化、SCF 重试和耗时，不仅复制终端摘要。`examples/analyze_enzyme_run.py`：不复用运行端判定代码；QM 键偏离另从 DCD 帧独立重算并核对 `steps.csv`；重算 Task 22 结论与 `acceptance.json` 对照，不一致时退出码 1。`steps.csv` 新增 `scf_cycles`、`restart_used`、`fresh_retries` 列。测试见 `tests/test_enzyme_workflow.py` T06 部分（完整运行、续跑、篡改 acceptance／CSV、CSV 低报键偏离）。
-- [ ] 同样归档非周期 QM/MM NVE、ONIOM NVE 与 restart 重现性的原始证据；无法找到的保留“历史记录，原始数据未复核”，安排新运行。现状：保留为历史记录；新运行随 T07 执行并保存机器可读结果。
-- [ ] 验收：每项结果能由命令和数据重算；README 中的“验证”措辞对应具体实现门槛，不扩大为反应准确性或平衡采样证明。DhlA 已由原始数据重算（`--legacy-region A`，与运行日志一致）；NVE／ONIOM／restart 部分随 T07 运行。
+- [x] 同样归档非周期 QM/MM NVE、ONIOM NVE 与 restart 重现性的原始证据；无法找到的保留“历史记录，原始数据未复核”，安排新运行。 2026-10-05 重新生成于 `/home/kasuga/openmm-orca-runs/t06_evidence_2026-10-05/`（CSV、`environment.json`、`summary.json`），`examples/analyze_nve.py` 重算，与 2026-09-27／09-29 历史值一致。
+- [x] 验收：每项结果能由命令和数据重算；README 中的“验证”措辞对应具体实现门槛，不扩大为反应准确性或平衡采样证明。DhlA（`analyze_enzyme_run.py`）、NVE／ONIOM／restart（`analyze_nve.py`）均由命令和数据重算，见 [验证记录](docs/validation/2026-10-05-t06-dhla-recompute.md)。
 
 依据：[CHANGELOG](CHANGELOG.zh-CN.md)，[ONIOM 计划](docs/plans/2026-09-28-oniom.md)。
 
@@ -88,8 +89,8 @@ P1 优先修复已确认的使用问题；P2 补齐可复现性、验证与维�
 
 - [x] 在允许 MPI 通信的执行环境运行 5 个被跳过的测试，记录环境、分配核数及结果；不要将 sandbox 跳过计为通过。2026-10-05 宿主机快速回归中 5 个 MPI 用例实际运行并通过（无 skip）。
 - [x] 运行 2 个 slow 测试：1 ps 非周期 QM/MM NVE，以及同一初态下 restart 开/关的 50 步能量比较。2026-10-05 本地 ORCA、核 0–3：2 passed（38 min），日志 `/home/kasuga/openmm-orca-runs/slow_tests_2026-10-05/pytest.log`。
-- [ ] 补一组 CUDA 与 Reference/CPU 的小体系能量/力对照，覆盖 link atom、周期镜像和虚拟位点；ONIOM NVE 示例保留机器可读结果。CUDA 对照已完成：`tests/test_platform_consistency.py`（RTX 2080 Ti，double；QM 力组差 < 1e-12 相对）。ONIOM NVE 机器可读结果待做。DhlA 新运行（当前代码，CUDA）PASS，见 [DhlA 记录](docs/validation/2026-10-05-t06-dhla-recompute.md)。
-- [ ] 验收：非周期 QM/MM NVE 漂移 < 0.017 kJ/mol/ps、标准差 < 0.05 kJ/mol；restart 每步差 < 1e-6 Eh；其余沿用现有测试阈值。周期硬截断体系不套用严格 NVE 门槛。 NVE 与 restart 两项由 2026-10-05 slow 测试通过（测试内断言上述阈值）；ONIOM NVE 待做。
+- [x] 补一组 CUDA 与 Reference/CPU 的小体系能量/力对照，覆盖 link atom、周期镜像和虚拟位点；ONIOM NVE 示例保留机器可读结果。CUDA 对照已完成：`tests/test_platform_consistency.py`（RTX 2080 Ti，double；QM 力组差 < 1e-12 相对）。ONIOM NVE 机器可读结果见 T06（`oniom_nve.csv`）。DhlA 新运行（当前代码，CUDA）PASS，见 [DhlA 记录](docs/validation/2026-10-05-t06-dhla-recompute.md)。
+- [x] 验收：非周期 QM/MM NVE 漂移 < 0.017 kJ/mol/ps、标准差 < 0.05 kJ/mol；restart 每步差 < 1e-6 Eh；其余沿用现有测试阈值。周期硬截断体系不套用严格 NVE 门槛。 NVE 与 restart 两项由 2026-10-05 slow 测试通过（测试内断言上述阈值）；ONIOM NVE 1 ps：+0.0067 kJ/mol/ps、0.0231 kJ/mol（在 QM/MM 阈值内）。
 
 依据：[MPI 测试](tests/test_orca_mpi.py)，[NVE 测试](tests/test_nve.py)，[restart 对照](tests/test_restart_reproducibility.py)。
 
@@ -148,7 +149,7 @@ P1 优先修复已确认的使用问题；P2 补齐可复现性、验证与维�
 
 ## 建议执行顺序与复核命令
 
-T01–T05 已完成；T06／T07 余项为 NVE／ONIOM／restart 原始证据与 ONIOM NVE 机器可读结果。T08–T10 在科学应用扩大前完成。T11 的并发/超时审查可独立进行，T12 保持后续回归。T13–T16 按实际应用需求排期。
+T01–T07 已完成；ORCA 上的中断续跑尚未实测。T08–T10 在科学应用扩大前完成。T11 的并发/超时审查可独立进行，T12 保持后续回归。T13–T16 按实际应用需求排期。
 
 ```bash
 export PY=/home/ruigengji/miniforge3/envs/openmm_dev/bin/python

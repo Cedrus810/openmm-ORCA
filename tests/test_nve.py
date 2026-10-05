@@ -1,10 +1,15 @@
 """NVE drift test for the QM/MM water cluster (plan Task 11).
 
 This is the M2 acceptance gate (spec §1.3 v0.1). Marked ``slow``: roughly
-25 minutes of serial ORCA (4000 steps × ~0.35 s).
+25 minutes of serial ORCA (4000 steps × ~0.35 s). With OPENMMORCA_EVIDENCE_DIR
+set, the sampled energies are written to qmmm_nve.csv there (T06).
 """
 
 from __future__ import annotations
+
+import csv
+import os
+from pathlib import Path
 
 import numpy as np
 import openmm as mm
@@ -35,18 +40,25 @@ def run_nve(n_steps: int = 4000, report_every: int = 10):
     context.setVelocitiesToTemperature(300 * unit.kelvin, 1234)
     helpers.remove_com_velocity(context)
 
-    times, totals = [], []
+    times, potentials, totals = [], [], []
     for step in range(n_steps + 1):
         if step % report_every == 0:
             state = context.getState(getEnergy=True)
             pot = state.getPotentialEnergy().value_in_unit(unit.kilojoule_per_mole)
             kin = state.getKineticEnergy().value_in_unit(unit.kilojoule_per_mole)
             times.append(step * 0.25 * 1e-3)  # ps
+            potentials.append(pot)
             totals.append(pot + kin)
         if step < n_steps:
             integrator.step(1)
 
     potential.close()
+    evidence = os.environ.get("OPENMMORCA_EVIDENCE_DIR")
+    if evidence:
+        with open(Path(evidence) / "qmmm_nve.csv", "w", newline="") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(["time_ps", "potential_kj_mol", "total_kj_mol"])
+            writer.writerows(zip(times, potentials, totals))
     times = np.asarray(times)
     totals = np.asarray(totals)
     drift = np.polyfit(times, totals, 1)[0]
