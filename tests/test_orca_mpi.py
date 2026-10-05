@@ -54,7 +54,7 @@ def _mpi_viable() -> tuple[bool, str]:
         return False, (
             f"mpirun -np 2 cannot start 2 processes ({head}). Inside a batch job "
             "this usually means the job was allocated fewer cores than "
-            "nprocs: request ncpus >= nprocs (e.g. qsub -l select=1:ncpus=N), "
+            "nprocs: request at least nprocs slots, "
             "or set OPI_MPI and/or OMPI_MCA_rmaps_default_mapping_policy="
             ":oversubscribe deliberately"
         )
