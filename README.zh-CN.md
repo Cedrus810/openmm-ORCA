@@ -1,6 +1,6 @@
 # openmm-orca
 
-[English](README.md) | 简体中文
+[English](README.md) | 简体中文 | [日本語](README.ja.md)
 
 OpenMM 驱动的 QM/MM：**OpenMM 负责 MD**（力场、积分器、温压控、轨迹），**ORCA 计算 QM 区**（电子结构 + 静电嵌入梯度），OPI（ORCA Python Interface）负责 ORCA 输入输出。接口风格与 `openmm-ml` / `openmm-pyscf` 一致。
 

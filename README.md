@@ -1,6 +1,6 @@
 # openmm-orca
 
-English | [简体中文](README.zh-CN.md)
+English | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 
 OpenMM-driven QM/MM: **OpenMM runs the MD** (force field, integrator, thermostat/barostat, trajectories) while **ORCA computes the QM region** (electronic structure + electrostatic-embedding gradients), with OPI (ORCA Python Interface) handling ORCA input/output. The interface style follows `openmm-ml` / `openmm-pyscf`.
 
