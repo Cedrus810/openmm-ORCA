@@ -58,12 +58,12 @@ be extended.
   a new Langevin seed (integrator_seed + attempt number) is used. This restarts
   from the State; it does not reproduce the uninterrupted trajectory.
 
-    export OPI_ORCA=/home/ruigengji/ORCA611
-    /home/ruigengji/miniforge3/envs/openmm_dev/bin/python examples/enzyme_qmmm.py \\
+    export OPI_ORCA=/path/to/orca
+    python examples/enzyme_qmmm.py \\
         --method XTB --steps 200 --outdir dhla_xtb          # smoke test
     PRTE_MCA_hwloc_default_cpu_list=0-39 ... --method r2SCAN-3c --nprocs 40 \\
         --steps 2000 --outdir dhla_r2scan3c   # 1 ps, ~3 h (validated 2026-10-01: PASS)
-    /home/ruigengji/miniforge3/envs/openmm_dev/bin/python examples/analyze_enzyme_run.py dhla_r2scan3c
+    python examples/analyze_enzyme_run.py dhla_r2scan3c
 
 DCE lies entirely in the QM region (both regions), where its force-field
 charges are zeroed and its internal terms removed, so its parameters only

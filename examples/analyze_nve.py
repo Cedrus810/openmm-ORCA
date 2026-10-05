@@ -13,7 +13,7 @@ Drift is the slope of a linear least-squares fit of total energy against time.
 Writes summary.json (with SHA-256 of every input) next to the CSVs. Exit code 1
 if a gated result fails.
 
-    python examples/analyze_nve.py /home/kasuga/openmm-orca-runs/t06_evidence_2026-10-05
+    python examples/analyze_nve.py <evidence-dir>
 """
 
 from __future__ import annotations

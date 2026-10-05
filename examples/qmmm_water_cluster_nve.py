@@ -5,8 +5,8 @@ cluster. After minimization the cluster is propagated with a 0.25 fs Verlet
 integrator and no thermostat for 1 ps; total energy drift (linear fit) and
 scatter are reported.
 
-    export OPI_ORCA=/home/ruigengji/ORCA611
-    /home/ruigengji/miniforge3/envs/openmm_dev/bin/python examples/qmmm_water_cluster_nve.py [csv_path]
+    export OPI_ORCA=/path/to/orca
+    python examples/qmmm_water_cluster_nve.py [csv_path]
 """
 
 from __future__ import annotations

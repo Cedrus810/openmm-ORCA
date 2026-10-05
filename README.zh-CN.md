@@ -29,7 +29,7 @@ export OPI_MPI=/path/to/openmpi
 # 确实要超订时显式设 OMPI_MCA_rmaps_default_mapping_policy=:oversubscribe
 ```
 
-ORCA 装在 NFS 上时，NFS 一拥堵，每步的启动开销会成倍增加（实测 0.4 s → 3.5 s/步）。跑 MD 前先把 ORCA 复制到本地盘或 tmpfs（`autoci_*` 用不到，可以不复制），再让 `OPI_ORCA` 指向副本：
+ORCA 装在 NFS 上时，NFS 一拥堵，每步的启动开销会成倍增加。跑 MD 前先把 ORCA 复制到本地盘或 tmpfs（`autoci_*` 用不到，可以不复制），再让 `OPI_ORCA` 指向副本：
 
 ```bash
 D=/dev/shm/orca-$USER; mkdir -p $D
@@ -39,7 +39,7 @@ export OPI_ORCA=$D
 
 共享集群上可能已有本地 ORCA 安装——`OPI_ORCA` 直接指向它即可，无需复制。运行产物放在持久的本地盘，不要放 `/tmp`。
 
-OpenMPI 的 `mpirun` 不理会 `taskset`，总是从 0 号核开始绑定。要把并行 ORCA 限定在指定核上（比如和别的任务共用机器时），设 `PRTE_MCA_hwloc_default_cpu_list` 为目标核列表，如 `4-35`。
+OpenMPI 的 `mpirun` 不理会 `taskset`，总是从 0 号核开始绑定。要把并行 ORCA 限定在指定核上（比如和别的任务共用机器时），设 `PRTE_MCA_hwloc_default_cpu_list` 为目标核列表。
 
 ## 最小示例
 
@@ -158,7 +158,7 @@ cd <scratch>/failures/failure_step_000123 && $OPI_ORCA/orca qm.inp > rerun.out
 export OPI_ORCA=/path/to/orca
 python -m pytest                    # 默认：单元测试 + 快速 ORCA 测试（不含 slow）
 python -m pytest -m orca -v         # 只跑需要 ORCA 的测试
-python -m pytest -m slow -v         # NVE 与 restart 重现性（约 35–40 分钟，视机器而定）
+python -m pytest -m slow -v         # NVE 与 restart 重现性（耗时较长）
 
 # 保存 slow 测试的机器可读证据（T06），再重算：
 OPENMMORCA_EVIDENCE_DIR=$DIR python -m pytest -m slow -v     # 写 qmmm_nve.csv、restart.csv

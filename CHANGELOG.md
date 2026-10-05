@@ -25,12 +25,12 @@ Versions follow the milestones of `docs/plans/2026-09-26-openmm-orca-implementat
 - The version is single-sourced from `openmmorca.__version__`; the build requires `setuptools>=77` (PEP 639 license string).
 
 ### Verification (2026-10-05)
-- Quick regression: **226 passed**, no skips (MPI tests run on the host; CUDA tests on an RTX 2080 Ti).
-- Slow tests: 2 passed (1 ps NVE drift; restart on/off, 50 steps). Raw evidence in `/home/kasuga/openmm-orca-runs/t06_evidence_2026-10-05/`, recomputed with `examples/analyze_nve.py`: QM/MM NVE +0.0056 kJ/mol/ps, std 0.0163 kJ/mol; ONIOM NVE (1 ps) +0.0067, 0.0231; restart max difference 3.9e-8 Eh. Same values as the 2026-09-27/29 records.
+- Quick regression: **226 passed**, no skips (MPI tests run on the host; CUDA tests on a CUDA GPU).
+- Slow tests: 2 passed (1 ps NVE drift; restart on/off, 50 steps). Raw evidence archived with the validation records, recomputed with `examples/analyze_nve.py`: QM/MM NVE +0.0056 kJ/mol/ps, std 0.0163 kJ/mol; ONIOM NVE (1 ps) +0.0067, 0.0231; restart max difference 3.9e-8 Eh. Same values as the 2026-09-27/29 records.
 - Clean-venv wheel (OpenMM 8.6.1): 179 non-ORCA tests passed.
 - DhlA Task 22, recomputed from products with `analyze_enzyme_run.py`:
-  - 2026-10-01 run (`/home/kasuga/openmm-orca-runs/dhla_r2scan3c_np40/`): PASS, 298.6 ± 1.1 K, max QM bond deviation 15.9 %.
-  - 2026-10-05 run with current code (`/home/kasuga/openmm-orca-runs/dhla_r2scan3c_np32_2026-10-05/`): PASS, 298.6 ± 1.4 K, 17.3 %.
+  - 2026-10-01 run (archived; see validation records): PASS, 298.6 ± 1.1 K, max QM bond deviation 15.9 %.
+  - 2026-10-05 run with current code (archived; see validation records): PASS, 298.6 ± 1.4 K, 17.3 %.
 - Checkpoint resume reproduces an uninterrupted run exactly with a deterministic backend on Reference. It has not been exercised with ORCA.
 - Records (Chinese): [P1 fixes](docs/validation/2026-10-04-priority-fixes.md), [T04/T05](docs/validation/2026-10-05-t04-t05.md), [T06/T07 evidence](docs/validation/2026-10-05-t06-dhla-recompute.md).
 

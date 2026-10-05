@@ -1,8 +1,8 @@
 """Benchmark ORCA wall time vs nprocs for one geometry (plan Task 14).
 
-    export OPI_ORCA=/home/ruigengji/ORCA611
+    export OPI_ORCA=/path/to/orca
     # 并行需要 MPI（登录节点没有系统 mpirun 时）：
-    export OPI_MPI=/home/apps/openmpi/5.0.7_gcc13.3.0
+    export OPI_MPI=/path/to/openmpi
     python examples/bench_nprocs.py examples/data/water12.xyz "HF def2-SVP" --nprocs 1,2,4,8,16,32,40
 
 For each nprocs: one warm-up call, then 3 timed calls; reports the median.

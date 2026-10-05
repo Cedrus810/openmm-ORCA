@@ -6,8 +6,8 @@ the rest, vacuum, no constraints. Minimize on the QM/MM surface, then 200
 steps of Langevin NVT (300 K, 0.5 fs), checking that the boundary bond stays
 intact.
 
-    export OPI_ORCA=/home/ruigengji/ORCA611
-    /home/ruigengji/miniforge3/envs/openmm_dev/bin/python examples/link_atom_dipeptide.py
+    export OPI_ORCA=/path/to/orca
+    python examples/link_atom_dipeptide.py
 """
 
 from __future__ import annotations

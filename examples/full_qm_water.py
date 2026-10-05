@@ -2,8 +2,8 @@
 
 Run with the openmm_dev environment and OPI_ORCA set:
 
-    export OPI_ORCA=/home/ruigengji/ORCA611
-    /home/ruigengji/miniforge3/envs/openmm_dev/bin/python examples/full_qm_water.py
+    export OPI_ORCA=/path/to/orca
+    python examples/full_qm_water.py
 """
 
 from __future__ import annotations

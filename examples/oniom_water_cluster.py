@@ -5,8 +5,8 @@ with HF/STO-3G on water 0 (model region) and xTB on the whole 5-water cluster
 (low level). All force-field terms are absent — the OpenMM System is a pure
 particle container driven by the ONIOM PythonForce.
 
-    export OPI_ORCA=/home/ruigengji/ORCA611
-    /home/ruigengji/miniforge3/envs/openmm_dev/bin/python examples/oniom_water_cluster.py [csv_path] [--steps 4000]
+    export OPI_ORCA=/path/to/orca
+    python examples/oniom_water_cluster.py [csv_path] [--steps 4000]
 """
 
 from __future__ import annotations

@@ -30,7 +30,7 @@ export OPI_MPI=/path/to/openmpi
 # To oversubscribe deliberately: OMPI_MCA_rmaps_default_mapping_policy=:oversubscribe
 ```
 
-If ORCA lives on NFS, congestion multiplies the per-step startup overhead (measured: 0.4 s → 3.5 s per step). Before running MD, copy ORCA to a local disk or tmpfs (`autoci_*` is not needed and can be skipped) and point `OPI_ORCA` at the copy:
+If ORCA lives on NFS, congestion can multiply the per-step startup overhead several-fold. Before running MD, copy ORCA to a local disk or tmpfs (`autoci_*` is not needed and can be skipped) and point `OPI_ORCA` at the copy:
 
 ```bash
 D=/dev/shm/orca-$USER; mkdir -p $D
@@ -40,7 +40,7 @@ export OPI_ORCA=$D
 
 On a shared cluster a local ORCA installation may already exist — point `OPI_ORCA` there instead of copying. Keep run outputs on a persistent local disk, not in `/tmp`.
 
-OpenMPI's `mpirun` ignores the caller's `taskset` affinity and always binds processes starting from core 0. To pin parallel ORCA to specific cores (e.g. when sharing the machine with other jobs), set `PRTE_MCA_hwloc_default_cpu_list` to the desired core list, e.g. `4-35`.
+OpenMPI's `mpirun` ignores the caller's `taskset` affinity and always binds processes starting from core 0. To pin parallel ORCA to specific cores (e.g. when sharing the machine with other jobs), set `PRTE_MCA_hwloc_default_cpu_list` to the desired core list.
 
 ## Minimal example
 
@@ -159,7 +159,7 @@ cd <scratch>/failures/failure_step_000123 && $OPI_ORCA/orca qm.inp > rerun.out
 export OPI_ORCA=/path/to/orca
 python -m pytest                    # default: unit tests + fast ORCA tests (no slow)
 python -m pytest -m orca -v         # only tests that need ORCA
-python -m pytest -m slow -v         # NVE and restart reproducibility (~35–40 min)
+python -m pytest -m slow -v         # NVE and restart reproducibility (long-running)
 
 # Keep machine-readable evidence of the slow tests (T06), then recompute it:
 OPENMMORCA_EVIDENCE_DIR=$DIR python -m pytest -m slow -v     # writes qmmm_nve.csv, restart.csv
