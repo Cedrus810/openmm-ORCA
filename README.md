@@ -6,6 +6,8 @@ OpenMM-driven QM/MM: **OpenMM runs the MD** (force field, integrator, thermostat
 
 Changes per version: [CHANGELOG.md](CHANGELOG.md). Design spec: `openmm_orca_opi_design_plan.md`; implementation plan: `docs/plans/2026-09-26-openmm-orca-implementation-plan.md`; ONIOM plan: `docs/plans/2026-09-28-oniom.md` (all in Chinese).
 
+Follow-up fixes, validation and feature extensions: [TODO list](TODO.md) (Chinese; includes priorities, evidence and acceptance criteria).
+
 **Current status (v0.4.0):** full-QM, QM/MM (electronic embedding, covalent boundaries with H link atoms, periodic MM with approximate cutoff embedding) and two-layer ONIOM (QM:QM, non-periodic), plus restart and failure-bundle diagnostics, are working (M0–M5 + ONIOM). Validated on a solvated enzyme (DhlA, 31,610 atoms, `examples/enzyme_qmmm.py`).
 
 ## Installation
@@ -87,6 +89,14 @@ system = oniom.createONIOMSystem(topology, atoms=[0, 1, 2], forceGroup=0)
 The energy is the standard subtractive combination `E_high(model) + E_low(full) − E_low(model)`; layers couple mechanically (no point-charge embedding between QM layers), the model region must be whole molecules, and the System carries no force-field terms. Each step costs three QM evaluations (one high, two low) through three independent backends, so every restart chain stays correctly sized. `high`'s charge/multiplicity describe the model region, `low`'s the full system; the low-level model-region evaluation uses `high`'s charge/multiplicity, so the low-layer-only atoms may be charged or open-shell. Every `createONIOMSystem` call creates those three backends; `oniom.summarize_timings()` / `oniom.close()` aggregate over both layers.
 
 QM/MM water-cluster NVE (1 ps, energy-conservation check): `examples/qmmm_water_cluster_nve.py`; ONIOM counterpart: `examples/oniom_water_cluster.py`; link-atom dipeptide NVT: `examples/link_atom_dipeptide.py`.
+
+Enzyme runs shorter than 2000 steps (1 ps) report smoke checks and `Task 22 acceptance: NOT_EVALUATED`; a single step is supported. Repeat `--reaction-bond I J` to monitor reactive bonds separately using zero-based OpenMM atom indices. Configured stability checks use the remaining QM bonds; the original Task 22 all-bond gate is still reported separately. The exit code follows the smoke/configured stability checks; full acceptance is recorded in `acceptance.json`. Each `steps.csv` row is flushed during the run; failures retain completed rows and close the backend.
+
+Preparation/equilibration caches now require matching `.manifest.json` sidecars, checking stage settings, input/artifact hashes, versions, atom mapping and box information. Legacy or mismatched caches are preserved and rejected; use a new `--outdir` to rebuild. Later QM method/region changes do not invalidate MM cache identity. Later QM/MM runs never overwrite an earlier run silently. An output directory holding run products (`run.json`, `steps.csv`, trajectories, `checkpoints/`, final State) is refused unless `--archive-existing` moves them to `archive/run-<UTC time>/`.
+
+`examples/analyze_enzyme_run.py OUTDIR [--json report.json]` recomputes a finished run from its products: length, temperature, bond deviations, embedding changes, SCF cycles/retries and timings. It also recomputes the QM bond deviations independently from the DCD frames (needs mdtraj) and checks them against `steps.csv`. It compares the recomputed Task 22 verdict with `acceptance.json`, includes the provenance from `run.json` (versions, host, command, git commit), and exits with 1 on any inconsistency.
+
+Checkpoints and resume: every `--checkpoint-interval` steps (default 100, a multiple of the 10-step DCD interval) and at the last step, the run writes an OpenMM checkpoint and a portable State XML. These are committed in `run.json` with the `steps.csv` length and hash. `run.json` also records the status (running / completed / failed) and every attempt, and a completed run writes `final_state.xml` and `final.pdb`. `--resume checkpoint` continues in a new process after checking the run identity, and restores the Langevin random-number state; it requires the same platform and OpenMM version. With a deterministic backend it reproduces the uninterrupted trajectory exactly. With ORCA, the first resumed step uses a fresh SCF guess, so agreement holds only within SCF convergence. `--resume state` restarts from the State with a new seed and does not reproduce the trajectory. The checkpointed `steps.csv` prefix is kept byte for byte; rows recomputed after the checkpoint are kept in `steps.superseded.attempt-NNN.csv`. Each attempt writes its own trajectory file, and a larger `--steps` extends a completed run.
 
 ## Parameters (`ORCAPotential.__init__`)
 

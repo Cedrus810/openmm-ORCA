@@ -4,6 +4,35 @@
 
 版本号对应 `docs/plans/2026-09-26-openmm-orca-implementation-plan.md` 的里程碑（M2 = v0.1，M3 = v0.2，M4 = v0.3，M5 = v0.4）。
 
+## 未发布 — 2026-10-05
+
+### 修复
+- `OutOfPlaneSite` 的力回分改用坐标 Jacobian，支持依赖其他虚拟位点的位点；父原子力通过原生 OpenMM 对照和有限差分。
+
+### 新增
+- 酶示例（`examples/enzyme_qmmm.py`）：
+  - 冒烟检查与完整 Task 22 验收分开；`--reaction-bond` 单独监控反应键。
+  - 准备／平衡缓存带 manifest，旧格式或失配缓存拒绝复用。
+  - `steps.csv` 每步 flush，新增 `scf_cycles`、`restart_used`、`fresh_retries` 列。
+  - 周期写 OpenMM checkpoint 与 State XML，提交到 `run.json`；`run.json` 记录状态、各次尝试及溯源信息（版本、主机、命令、git 提交、`OPI_ORCA`）。运行完成时写 `final_state.xml`、`final.pdb`。
+  - `--resume checkpoint|state` 校验运行身份与 CSV 前缀；`--archive-existing` 归档旧产物；新运行不覆盖已有运行产物；输出目录加锁。
+- `examples/analyze_enzyme_run.py`：从产物重算运行结果，DCD 独立核对键偏离，Task 22 结论与 `acceptance.json` 对照；`--legacy-region` 读取 `run.json` 之前的旧运行。
+- 测试：`tests/test_platform_consistency.py`（CUDA 对 Reference）、`tests/test_packaging.py`（版本一致性）。
+
+### 变更
+- QM/MM Langevin 积分器显式设种子（`QMMM_RECIPE`）。
+- 版本单一来源 `openmmorca.__version__`；构建依赖 `setuptools>=77`（PEP 639 字符串 license）。
+
+### 验证（2026-10-05）
+- 快速回归：**224 通过**，无跳过（MPI 用例在宿主机实际运行；CUDA 用例在 RTX 2080 Ti 上运行）。
+- slow 测试：2 通过（1 ps NVE 漂移；restart 开／关各 50 步）。
+- 干净 venv 安装 wheel（OpenMM 8.6.1）：非 ORCA 测试 179 通过。
+- DhlA Task 22，用 `analyze_enzyme_run.py` 从产物重算：
+  - 2026-10-01 运行（`/home/kasuga/openmm-orca-runs/dhla_r2scan3c_np40/`）：PASS，298.6 ± 1.1 K，最大 QM 键偏离 15.9%。
+  - 2026-10-05 当前代码运行（`/home/kasuga/openmm-orca-runs/dhla_r2scan3c_np32_2026-10-05/`）：PASS，298.6 ± 1.4 K，17.3%。
+- checkpoint 续跑：确定性后端在 Reference 上与不中断运行逐位一致；尚未用 ORCA 实测。
+- 记录：[P1 修复](docs/validation/2026-10-04-priority-fixes.md)，[T04／T05](docs/validation/2026-10-05-t04-t05.md)，[DhlA](docs/validation/2026-10-05-t06-dhla-recompute.md)。
+
 ## 0.4.0 — 2026-10-01（M5：周期性 MM + 截断嵌入）
 
 ### 新增

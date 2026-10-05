@@ -1,0 +1,67 @@
+{
+  "outdir": "/home/kasuga/openmm-orca-runs/dhla_r2scan3c_np40",
+  "legacy": true,
+  "artifact_sha256": {
+    "equilibrated.xml": "077c10679e919e9e00559e5d94e08d52ceabe8a0de9f16e67c84417ff2ea900f",
+    "prepared.pdb": "1db3ad9a3cb42ed3b6a6a2aebe038808cd8d747f26685c9faddaf5c847d6e11a",
+    "run.log": "41433cce91e740ab59bb66397e491aa07fa7004e524c46995759e038013fe45b",
+    "steps.csv": "feee4924196782799456f0fc6929a56d58249afb194facb264ad3dc630ece401",
+    "trajectory.dcd": "d975350298759ba65c47a00025301fb7e511364c306d49a1b2e1c2ce525b4457"
+  },
+  "length": {
+    "requested_steps": 2000,
+    "logged_steps": 2000,
+    "complete": true,
+    "duration_ps": 1.0,
+    "attempts": 1
+  },
+  "temperature": {
+    "finite": true,
+    "tail_samples": 500,
+    "tail_mean_K": 298.5684141493941,
+    "tail_std_K": 1.1295095918654836,
+    "min_K": 286.0504904510841,
+    "max_K": 301.8002014795362
+  },
+  "bonds": {
+    "max_bond_dev": 0.1590448574926251,
+    "max_stable_bond_dev": 0.1590448574926251,
+    "max_reaction_bond_dev": 0.0,
+    "trajectory": {
+      "frames": 200,
+      "max_bond_dev": 0.15866757262949305,
+      "max_stable_bond_dev": 0.15866757262949305
+    }
+  },
+  "qm_calls": {
+    "timing_excluding_first_step_of_each_attempt": {
+      "t_write": {
+        "mean_s": 0.009359589150094386,
+        "p95_s": 0.011189530498813837
+      },
+      "t_orca": {
+        "mean_s": 5.453651387020121,
+        "p95_s": 5.643107613897882
+      },
+      "t_read": {
+        "mean_s": 0.011680561781770854,
+        "p95_s": 0.013778837004792877
+      },
+      "t_total": {
+        "mean_s": 5.476340676378887,
+        "p95_s": 5.666055756501737
+      }
+    },
+    "scf_cycles_mean": null,
+    "scf_cycles_max": null,
+    "restart_used_fraction": null,
+    "fresh_retries_by_attempt": null,
+    "embedding_groups_mean": 151.95,
+    "steps_with_embedding_changes": 286
+  },
+  "verdict": {
+    "status": "PASS",
+    "task22_acceptance": "PASS"
+  },
+  "problems": []
+}

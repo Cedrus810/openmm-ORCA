@@ -6,6 +6,8 @@ OpenMM 驱动的 QM/MM：**OpenMM 负责 MD**（力场、积分器、温压控�
 
 各版本变更：[CHANGELOG.zh-CN.md](CHANGELOG.zh-CN.md)。设计规格：`openmm_orca_opi_design_plan.md`；实施计划：`docs/plans/2026-09-26-openmm-orca-implementation-plan.md`；ONIOM 计划：`docs/plans/2026-09-28-oniom.md`。
 
+后续修复、验证与功能扩展见 [TODO 清单](TODO.md)（含优先级、证据和验收条件）。
+
 **当前状态（v0.4.0）**：full-QM、QM/MM（电子嵌入，含 H link atom 共价边界、周期性 MM 的近似截断嵌入）、双层 ONIOM（QM:QM，非周期）、restart 与失败包诊断已可用（M0–M5 + ONIOM）。已在溶剂化酶体系上验证（DhlA，31,610 原子，`examples/enzyme_qmmm.py`）。
 
 ## 安装
@@ -87,6 +89,14 @@ system = oniom.createONIOMSystem(topology, atoms=[0, 1, 2], forceGroup=0)
 能量是标准减法组合 `E_high(model) + E_low(full) − E_low(model)`；层间机械耦合（QM 层之间不加点电荷嵌入）、model 区必须整分子、System 不含力场项。每步 3 次 QM 调用（1 高 2 低），走 3 个独立 backend，各 restart 链尺寸自洽。`high` 的 charge/multiplicity 描述 model 区，`low` 的描述全体系；低层 model 区计算使用 `high` 的 charge/multiplicity，因此 low-only 原子可以带电或开壳层。每次 `createONIOMSystem` 都会新建这 3 个 backend；`oniom.summarize_timings()` / `oniom.close()` 汇总两层。
 
 QM/MM 团簇 NVE（1 ps，验证能量守恒）：`examples/qmmm_water_cluster_nve.py`；ONIOM 对应版本：`examples/oniom_water_cluster.py`；link atom 二肽 NVT：`examples/link_atom_dipeptide.py`。
+
+酶示例少于 2000 步（1 ps）时只报告冒烟检查，`Task 22 acceptance` 为 `NOT_EVALUATED`；单步运行也可正常汇总。`--reaction-bond I J` 用零起始 OpenMM 原子索引显式指定单独监控的反应键，可重复指定；稳定性检查针对其余 QM 键，原 Task 22 的全 QM 键门槛仍单独报告。退出码对应冒烟／所配置的稳定性检查，完整验收结果见 `acceptance.json`。`steps.csv` 每步写入，失败时保留已完成行并关闭后端。
+
+`prepared.pdb` 与 `equilibrated.xml` 缓存现在需要对应的 `.manifest.json`，核对阶段参数、输入／产物哈希、版本、原子映射和盒信息。无 manifest 的旧缓存或配置不一致的缓存会被保留并拒绝复用；使用新的 `--outdir` 重新准备。改变后续 QM 方法或区域不会使 MM 缓存身份失效。QM/MM 运行不会静默覆盖已有运行：输出目录中已有运行产物（`run.json`、`steps.csv`、轨迹、`checkpoints/`、最终 State）时拒绝启动，除非用 `--archive-existing` 将其移至 `archive/run-<UTC 时间>/`。
+
+`examples/analyze_enzyme_run.py OUTDIR [--json report.json]` 从运行产物重算运行长度、温度、键偏离、嵌入组变化、SCF 循环／重试与耗时；QM 键偏离另从 DCD 帧独立重算（需 mdtraj）并与 `steps.csv` 核对。脚本把重算的 Task 22 结论与 `acceptance.json` 对照，并附上 `run.json` 中的溯源信息（版本、主机、命令、git 提交）；发现任何不一致时退出码为 1。
+
+Checkpoint 与续跑：每 `--checkpoint-interval` 步（默认 100，须为 10 步 DCD 间隔的整数倍）及最后一步写 OpenMM checkpoint 与可移植 State XML，连同 `steps.csv` 长度与哈希提交到 `run.json`。`run.json` 同时记录运行状态（running / completed / failed）和每次尝试；完成时写 `final_state.xml` 与 `final.pdb`。`--resume checkpoint` 在新进程中校验运行身份后续跑，恢复 Langevin 随机数状态，要求平台和 OpenMM 版本一致；确定性后端下与不中断的轨迹逐位一致。ORCA 续跑首步为 fresh SCF 初猜，只在 SCF 收敛精度内一致。`--resume state` 从 State 换新种子起跑，不重现原轨迹。checkpoint 之前的 `steps.csv` 逐字节保留，之后重算的行另存为 `steps.superseded.attempt-NNN.csv`；每次尝试写独立轨迹文件；增大 `--steps` 可延长已完成的运行。
 
 ## 参数（`ORCAPotential.__init__`）
 
