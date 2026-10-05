@@ -12,31 +12,35 @@ Follow-up fixes, validation and feature extensions: [TODO list](TODO.md) (Chines
 
 ## Installation
 
-```bash
-# Environment: mamba env openmm_dev (Python ≥ 3.10, openmm ≥ 8.5, orca-pi ≥ 2.0, numpy)
-/home/ruigengji/miniforge3/envs/openmm_dev/bin/python -m pip install -e /home/ruigengji/openmm-ORCA
+Requirements: Python ≥ 3.10, [OpenMM](https://openmm.org/) ≥ 8.5, [orca-pi](https://pypi.org/project/orca-pi/) ≥ 2.0, numpy, and an ORCA ≥ 6.1 installation (not pip-installable; license required).
 
-# ORCA path (required)
-export OPI_ORCA=/home/ruigengji/ORCA611
-# MPI is needed for nprocs > 1; on nodes without a system mpirun (e.g. login nodes) set:
-export OPI_MPI=/home/apps/openmpi/5.0.7_gcc13.3.0
-# Note: inside a PBS job, parallel ORCA requires ncpus ≥ nprocs (OpenMPI/PRRTE read the
-# scheduler allocation; "Not enough slots available" means too few cores), e.g.:
-#   qsub -I -l select=1:ncpus=40   # 40-core benchmark
-# To oversubscribe deliberately, set OMPI_MCA_rmaps_default_mapping_policy=:oversubscribe
+```bash
+python -m pip install -e .        # from the repository root
+
+# ORCA location (required; orca-pi needs it at import time)
+export OPI_ORCA=/path/to/orca     # the directory containing the orca binary
+
+# MPI is needed for nprocs > 1; on nodes without a system mpirun (e.g. login
+# nodes) point OPI_MPI at an OpenMPI installation (directory containing mpirun):
+export OPI_MPI=/path/to/openmpi
+
+# Under a batch scheduler, a parallel ORCA run requires that the job allocation
+# provides at least nprocs slots (OpenMPI/PRRTE read the scheduler allocation;
+# "Not enough slots available" means the job asks for fewer cores than nprocs).
+# To oversubscribe deliberately: OMPI_MCA_rmaps_default_mapping_policy=:oversubscribe
 ```
 
-If ORCA lives on NFS, congestion multiplies the per-step startup overhead (measured here: 0.4 s → 3.5 s per step). Before running MD, copy ORCA to a local disk or tmpfs (`autoci_*` is not needed and can be skipped) and point `OPI_ORCA` at the copy:
+If ORCA lives on NFS, congestion multiplies the per-step startup overhead (measured: 0.4 s → 3.5 s per step). Before running MD, copy ORCA to a local disk or tmpfs (`autoci_*` is not needed and can be skipped) and point `OPI_ORCA` at the copy:
 
 ```bash
-D=/dev/shm/orca611-$USER; mkdir -p $D
-cd /home/ruigengji/ORCA611 && cp -a lib datasets $D/ && ls | grep -v -e '^autoci_' -e '^lib$' -e '^datasets$' | xargs -I{} cp -a {} $D/
+D=/dev/shm/orca-$USER; mkdir -p $D
+cd /path/to/orca && cp -a lib datasets $D/ && ls | grep -v -e '^autoci_' -e '^lib$' -e '^datasets$' | xargs -I{} cp -a {} $D/
 export OPI_ORCA=$D
 ```
 
-On kasuga01 a local copy of the same ORCA 6.1.1 build is already installed at `/home/kasuga/orca_6_1_1_linux_x86-64_shared_openmpi418_avx2`; point `OPI_ORCA` there instead of copying. Keep run outputs on a persistent local disk (e.g. `/home/kasuga/openmm-orca-runs/`), not in `/tmp`.
+On a shared cluster a local ORCA installation may already exist — point `OPI_ORCA` there instead of copying. Keep run outputs on a persistent local disk, not in `/tmp`.
 
-OpenMPI's `mpirun` ignores the caller's `taskset` affinity and always binds processes starting from core 0. To pin parallel ORCA to specific cores (e.g. when sharing the machine with other jobs), set `PRTE_MCA_hwloc_default_cpu_list=4-35`.
+OpenMPI's `mpirun` ignores the caller's `taskset` affinity and always binds processes starting from core 0. To pin parallel ORCA to specific cores (e.g. when sharing the machine with other jobs), set `PRTE_MCA_hwloc_default_cpu_list` to the desired core list, e.g. `4-35`.
 
 ## Minimal example
 
@@ -152,15 +156,15 @@ cd <scratch>/failures/failure_step_000123 && $OPI_ORCA/orca qm.inp > rerun.out
 ## Running the tests
 
 ```bash
-export OPI_ORCA=/home/ruigengji/ORCA611
-$PY -m pytest                    # default: unit tests + fast ORCA tests (no slow)
-$PY -m pytest -m orca -v         # only tests that need ORCA
-$PY -m pytest -m slow -v         # NVE and restart reproducibility (~36 min on kasuga01)
+export OPI_ORCA=/path/to/orca
+python -m pytest                    # default: unit tests + fast ORCA tests (no slow)
+python -m pytest -m orca -v         # only tests that need ORCA
+python -m pytest -m slow -v         # NVE and restart reproducibility (~35–40 min)
 
 # Keep machine-readable evidence of the slow tests (T06), then recompute it:
-OPENMMORCA_EVIDENCE_DIR=$DIR $PY -m pytest -m slow -v     # writes qmmm_nve.csv, restart.csv
-$PY examples/oniom_water_cluster.py $DIR/oniom_nve.csv --steps 4000
-$PY examples/analyze_nve.py $DIR
+OPENMMORCA_EVIDENCE_DIR=$DIR python -m pytest -m slow -v     # writes qmmm_nve.csv, restart.csv
+python examples/oniom_water_cluster.py $DIR/oniom_nve.csv --steps 4000
+python examples/analyze_nve.py $DIR
 ```
 
 Without ORCA, `orca`-marked tests are skipped automatically (note: on desktop Linux `/usr/bin/orca` may be the screen reader; conftest only accepts an ELF binary). `tests/test_platform_consistency.py` compares CUDA (double precision) with Reference for link atoms, periodic imaging and virtual sites, and is skipped without a usable CUDA device. `tests/test_packaging.py` fails when the installed metadata is stale; fix it with `pip install -e . --no-deps`. `examples/analyze_enzyme_run.py` needs mdtraj for its DCD check, and otherwise skips that check.

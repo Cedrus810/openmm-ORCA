@@ -1,4 +1,4 @@
-# openmmorca
+# openmm-orca
 
 [English](README.md) | 简体中文
 
@@ -12,31 +12,34 @@ OpenMM 驱动的 QM/MM：**OpenMM 负责 MD**（力场、积分器、温压控�
 
 ## 安装
 
-```bash
-# 环境：mamba env openmm_dev（Python ≥ 3.10，openmm ≥ 8.5，orca-pi ≥ 2.0，numpy）
-/home/ruigengji/miniforge3/envs/openmm_dev/bin/python -m pip install -e /home/ruigengji/openmm-ORCA
+依赖环境：Python ≥ 3.10、[OpenMM](https://openmm.org/) ≥ 8.5、[orca-pi](https://pypi.org/project/orca-pi/) ≥ 2.0、numpy，以及一份 ORCA ≥ 6.1 安装（不可 pip 安装，需许可证）。
 
-# ORCA 路径（必设）
-export OPI_ORCA=/home/ruigengji/ORCA611
-# 并行（nprocs>1）需要 MPI；在没有系统 mpirun 的节点上（如登录节点）设：
-export OPI_MPI=/home/apps/openmpi/5.0.7_gcc13.3.0
-# 注意：PBS 任务内并行 ORCA 要求任务申请的核数 ≥ nprocs（OpenMPI/PRRTE 读取
-# 调度器分配，"Not enough slots available" 就是核不够），例如：
-#   qsub -I -l select=1:ncpus=40   # 跑 40 核基准
+```bash
+python -m pip install -e .        # 在仓库根目录执行
+
+# ORCA 路径（必设；orca-pi 导入时就需要）
+export OPI_ORCA=/path/to/orca     # 含 orca 可执行文件的目录
+
+# 并行（nprocs > 1）需要 MPI；在没有系统 mpirun 的节点上（如登录节点），
+# 把 OPI_MPI 指向一份 OpenMPI 安装（含 mpirun 的目录）：
+export OPI_MPI=/path/to/openmpi
+
+# 批处理调度器（PBS/Slurm）下，并行 ORCA 要求任务分配的槽位 ≥ nprocs
+# （OpenMPI/PRRTE 读取调度器分配，"Not enough slots available" 就是申请核数不够）。
 # 确实要超订时显式设 OMPI_MCA_rmaps_default_mapping_policy=:oversubscribe
 ```
 
-ORCA 装在 NFS 上时，NFS 一拥堵，每步的启动开销会成倍增加（本机实测 0.4 s → 3.5 s/步）。跑 MD 前先把 ORCA 复制到本地盘或 tmpfs（`autoci_*` 用不到，可以不复制），再让 `OPI_ORCA` 指向副本：
+ORCA 装在 NFS 上时，NFS 一拥堵，每步的启动开销会成倍增加（实测 0.4 s → 3.5 s/步）。跑 MD 前先把 ORCA 复制到本地盘或 tmpfs（`autoci_*` 用不到，可以不复制），再让 `OPI_ORCA` 指向副本：
 
 ```bash
-D=/dev/shm/orca611-$USER; mkdir -p $D
-cd /home/ruigengji/ORCA611 && cp -a lib datasets $D/ && ls | grep -v -e '^autoci_' -e '^lib$' -e '^datasets$' | xargs -I{} cp -a {} $D/
+D=/dev/shm/orca-$USER; mkdir -p $D
+cd /path/to/orca && cp -a lib datasets $D/ && ls | grep -v -e '^autoci_' -e '^lib$' -e '^datasets$' | xargs -I{} cp -a {} $D/
 export OPI_ORCA=$D
 ```
 
-kasuga01 本地已装有同一 ORCA 6.1.1 构建：`/home/kasuga/orca_6_1_1_linux_x86-64_shared_openmpi418_avx2`，`OPI_ORCA` 直接指向它即可，无需复制。运行产物放在持久的本地盘（如 `/home/kasuga/openmm-orca-runs/`），不要放 `/tmp`。
+共享集群上可能已有本地 ORCA 安装——`OPI_ORCA` 直接指向它即可，无需复制。运行产物放在持久的本地盘，不要放 `/tmp`。
 
-OpenMPI 的 `mpirun` 不理会 `taskset`，总是从 0 号核开始绑定。要把并行 ORCA 限定在指定核上（比如和别的任务共用机器时），设 `PRTE_MCA_hwloc_default_cpu_list=4-35`。
+OpenMPI 的 `mpirun` 不理会 `taskset`，总是从 0 号核开始绑定。要把并行 ORCA 限定在指定核上（比如和别的任务共用机器时），设 `PRTE_MCA_hwloc_default_cpu_list` 为目标核列表，如 `4-35`。
 
 ## 最小示例
 
@@ -90,11 +93,11 @@ system = oniom.createONIOMSystem(topology, atoms=[0, 1, 2], forceGroup=0)
 
 能量是标准减法组合 `E_high(model) + E_low(full) − E_low(model)`；层间机械耦合（QM 层之间不加点电荷嵌入）、model 区必须整分子、System 不含力场项。每步 3 次 QM 调用（1 高 2 低），走 3 个独立 backend，各 restart 链尺寸自洽。`high` 的 charge/multiplicity 描述 model 区，`low` 的描述全体系；低层 model 区计算使用 `high` 的 charge/multiplicity，因此 low-only 原子可以带电或开壳层。每次 `createONIOMSystem` 都会新建这 3 个 backend；`oniom.summarize_timings()` / `oniom.close()` 汇总两层。
 
-QM/MM 团簇 NVE（1 ps，验证能量守恒）：`examples/qmmm_water_cluster_nve.py`；ONIOM 对应版本：`examples/oniom_water_cluster.py`（默认 400 步 = 0.1 ps，`--steps 4000` 为 1 ps）；link atom 二肽 NVT：`examples/link_atom_dipeptide.py`。`examples/analyze_nve.py DIR` 从 `DIR` 中的证据 CSV（见“运行测试”）重算 NVE 漂移／标准差与 restart 重现性差值，写出带输入哈希的 `summary.json`。
+QM/MM 团簇 NVE（1 ps，验证能量守恒）：`examples/qmmm_water_cluster_nve.py`；ONIOM 对应版本：`examples/oniom_water_cluster.py`（默认 400 步 = 0.1 ps，`--steps 4000` 为 1 ps）；link atom 二肽 NVT：`examples/link_atom_dipeptide.py`。`examples/analyze_nve.py DIR` 从 `DIR` 中的证据 CSV（见"运行测试"）重算 NVE 漂移／标准差与 restart 重现性差值，写出带输入哈希的 `summary.json`。
 
 酶示例少于 2000 步（1 ps）时只报告冒烟检查，`Task 22 acceptance` 为 `NOT_EVALUATED`；单步运行也可正常汇总。`--reaction-bond I J` 用零起始 OpenMM 原子索引显式指定单独监控的反应键，可重复指定；稳定性检查针对其余 QM 键，原 Task 22 的全 QM 键门槛仍单独报告。退出码对应冒烟／所配置的稳定性检查，完整验收结果见 `acceptance.json`。`steps.csv` 每步写入，失败时保留已完成行并关闭后端。
 
-`prepared.pdb` 与 `equilibrated.xml` 缓存现在需要对应的 `.manifest.json`，核对阶段参数、输入／产物哈希、版本、原子映射和盒信息。无 manifest 的旧缓存或配置不一致的缓存会被保留并拒绝复用；使用新的 `--outdir` 重新准备。改变后续 QM 方法或区域不会使 MM 缓存身份失效。QM/MM 运行不会静默覆盖已有运行：输出目录中已有运行产物（`run.json`、`steps.csv`、轨迹、`checkpoints/`、最终 State）时拒绝启动，除非用 `--archive-existing` 将其移至 `archive/run-<UTC 时间>/`。
+准备/平衡缓存需要对应的 `.manifest.json`，核对阶段参数、输入／产物哈希、版本、原子映射和盒信息。无 manifest 的旧缓存或配置不一致的缓存会被保留并拒绝复用；使用新的 `--outdir` 重新准备。改变后续 QM 方法或区域不会使 MM 缓存身份失效。QM/MM 运行不会静默覆盖已有运行：输出目录中已有运行产物（`run.json`、`steps.csv`、轨迹、`checkpoints/`、最终 State）时拒绝启动，除非用 `--archive-existing` 将其移至 `archive/run-<UTC 时间>/`。
 
 `examples/analyze_enzyme_run.py OUTDIR [--json report.json]` 从运行产物重算运行长度、温度、键偏离、嵌入组变化、SCF 循环／重试与耗时；QM 键偏离另从 DCD 帧独立重算（需 mdtraj）并与 `steps.csv` 核对。脚本把重算的 Task 22 结论与 `acceptance.json` 对照，并附上 `run.json` 中的溯源信息（版本、主机、命令、git 提交）；发现任何不一致时退出码为 1。
 
@@ -152,15 +155,15 @@ cd <scratch>/failures/failure_step_000123 && $OPI_ORCA/orca qm.inp > rerun.out
 ## 运行测试
 
 ```bash
-export OPI_ORCA=/home/ruigengji/ORCA611
-$PY -m pytest                    # 默认：单元测试 + 快速 ORCA 测试（不含 slow）
-$PY -m pytest -m orca -v         # 只跑需要 ORCA 的测试
-$PY -m pytest -m slow -v         # NVE 与 restart 重现性（kasuga01 上约 36 分钟）
+export OPI_ORCA=/path/to/orca
+python -m pytest                    # 默认：单元测试 + 快速 ORCA 测试（不含 slow）
+python -m pytest -m orca -v         # 只跑需要 ORCA 的测试
+python -m pytest -m slow -v         # NVE 与 restart 重现性（约 35–40 分钟，视机器而定）
 
 # 保存 slow 测试的机器可读证据（T06），再重算：
-OPENMMORCA_EVIDENCE_DIR=$DIR $PY -m pytest -m slow -v     # 写 qmmm_nve.csv、restart.csv
-$PY examples/oniom_water_cluster.py $DIR/oniom_nve.csv --steps 4000
-$PY examples/analyze_nve.py $DIR
+OPENMMORCA_EVIDENCE_DIR=$DIR python -m pytest -m slow -v     # 写 qmmm_nve.csv、restart.csv
+python examples/oniom_water_cluster.py $DIR/oniom_nve.csv --steps 4000
+python examples/analyze_nve.py $DIR
 ```
 
 没有 ORCA 时 `orca` 标记的测试自动跳过（注意：桌面 Linux 上 `/usr/bin/orca` 可能是屏幕阅读器，conftest 只认 ELF 二进制）。`tests/test_platform_consistency.py` 在双精度 CUDA 与 Reference 之间对照 link atom、周期镜像与虚拟位点，无可用 CUDA 设备时跳过。`tests/test_packaging.py` 在安装元数据过期时失败，用 `pip install -e . --no-deps` 修复。`examples/analyze_enzyme_run.py` 的 DCD 核对需要 mdtraj，未安装时跳过该项。
