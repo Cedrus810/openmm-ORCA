@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=64"]
+requires = ["setuptools>=77"]  # PEP 639 license string
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "openmm-orca"
-version = "0.4.0"
+dynamic = ["version"]
 description = "OpenMM-driven QM/MM and ONIOM with ORCA (via OPI) as the QM backend"
 readme = "README.md"
 license = "MIT"
@@ -26,6 +26,9 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["pytest>=9"]
+
+[tool.setuptools.dynamic]
+version = {attr = "openmmorca.__version__"}  # single source of the version
 
 [tool.setuptools.packages.find]
 include = ["openmmorca*"]
