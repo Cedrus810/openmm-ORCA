@@ -182,3 +182,71 @@ def test_particle_count_mismatch():
     context = make_context(system, helpers.water_positions(1))
     with pytest.raises(mm.OpenMMException, match="configured for 6"):
         context.getState(getEnergy=True)
+
+
+@pytest.mark.parametrize("kind", ["average2", "average3", "out_of_plane", "nested"])
+def test_virtual_site_parent_forces_match_native_and_finite_difference(kind):
+    """Distort parent geometry, recompute sites, and differentiate every parent."""
+    system = mm.System()
+    for mass in (12.0, 12.0, 1.0, 1.0, 0.0):
+        system.addParticle(mass)
+    if kind == "average2":
+        site = mm.TwoParticleAverageSite(1, 2, 0.7, 0.3)
+    elif kind == "average3":
+        site = mm.ThreeParticleAverageSite(1, 2, 3, 0.6, 0.1, 0.3)
+    else:
+        site = mm.OutOfPlaneSite(1, 2, 3, 0.25, 0.3, 2.7)
+    system.setVirtualSite(4, site)
+    embedded_site = 4
+    if kind == "nested":
+        system.addParticle(0.0)
+        system.setVirtualSite(5, mm.TwoParticleAverageSite(4, 2, 0.8, 0.2))
+        embedded_site = 5
+
+    native_system = mm.XmlSerializer.deserialize(mm.XmlSerializer.serialize(system))
+    native_force = mm.CustomBondForce("k/r")
+    native_force.addGlobalParameter("k", -0.4 * COULOMB_KJ_MOL_NM)
+    native_force.addBond(0, embedded_site, [])
+    native_system.addForce(native_force)
+
+    callback = QMMMCallback(
+        FakeBackend([1.0]), [0], ["C"], system.getNumParticles(),
+        [embedded_site], [-0.4], system=system,
+    )
+    system.addForce(make_python_force(callback))
+    positions = np.array([
+        [0.0, -0.1, 0.05], [0.6, 0.2, 0.3], [0.8, 0.4, 0.2],
+        [0.5, 0.6, 0.5], [0.0, 0.0, 0.0],
+    ])
+    if kind == "nested":
+        positions = np.vstack([positions, np.zeros(3)])
+    context = make_context(system, positions)
+    native = make_context(native_system, positions)
+    context.computeVirtualSites()
+    native.computeVirtualSites()
+    state = context.getState(getEnergy=True, getForces=True)
+    forces = state.getForces(asNumpy=True).value_in_unit(unit.kilojoule_per_mole / unit.nanometer)
+    native_state = native.getState(getEnergy=True, getForces=True)
+    native_forces = native_state.getForces(asNumpy=True).value_in_unit(
+        unit.kilojoule_per_mole / unit.nanometer
+    )
+    # Native forces on site particles may still be reported by OpenMM;
+    # compare the physical particles, on which dynamics act.
+    np.testing.assert_allclose(forces[:4], native_forces[:4], atol=1e-9)
+    np.testing.assert_allclose(forces[4:], 0.0, atol=1e-12)
+    np.testing.assert_allclose(forces.sum(axis=0), 0.0, atol=1e-10)
+    assert state.getPotentialEnergy() == native_state.getPotentialEnergy()
+
+    def energy(pos):
+        context.setPositions(pos * unit.nanometer)
+        context.computeVirtualSites()
+        return context.getState(getEnergy=True).getPotentialEnergy().value_in_unit(unit.kilojoule_per_mole)
+
+    h = 1e-6
+    for particle in range(4):
+        for axis in range(3):
+            plus, minus = positions.copy(), positions.copy()
+            plus[particle, axis] += h
+            minus[particle, axis] -= h
+            fd_force = -(energy(plus) - energy(minus)) / (2 * h)
+            assert fd_force == pytest.approx(forces[particle, axis], abs=2e-6)
