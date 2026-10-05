@@ -310,7 +310,7 @@ class ORCAOPIBackend:
         """Tail of an output file, for self-diagnosing error messages.
 
         Failure bundles live in scratch directories that may be node-local
-        and transient (PBS job directories); embedding the tail in the
+        and transient (batch job directories); embedding the tail in the
         exception makes remote failures diagnosable from a paste alone.
         """
         path = self.scratch.current / name

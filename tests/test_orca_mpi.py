@@ -28,7 +28,7 @@ def _mpi_viable() -> tuple[bool, str]:
 
     * ``mpirun`` on PATH but ORCA's MPI launcher libs unresolved — OPI only
       adds the MPI lib directory when ``OPI_MPI`` is set;
-    * inside a PBS job, PRRTE reads the scheduler's allocation and refuses
+    * inside a batch job, PRRTE reads the scheduler's allocation and refuses
       ``mpirun -np 2`` with "Not enough slots available" when the job was
       granted fewer cores than requested processes.
 

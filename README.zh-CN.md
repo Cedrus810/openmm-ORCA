@@ -24,7 +24,7 @@ export OPI_ORCA=/path/to/orca     # 含 orca 可执行文件的目录
 # 把 OPI_MPI 指向一份 OpenMPI 安装（含 mpirun 的目录）：
 export OPI_MPI=/path/to/openmpi
 
-# 批处理调度器（PBS/Slurm）下，并行 ORCA 要求任务分配的槽位 ≥ nprocs
+# 批处理调度器下，并行 ORCA 要求任务分配的槽位 ≥ nprocs
 # （OpenMPI/PRRTE 读取调度器分配，"Not enough slots available" 就是申请核数不够）。
 # 确实要超订时显式设 OMPI_MCA_rmaps_default_mapping_policy=:oversubscribe
 ```
