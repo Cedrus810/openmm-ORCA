@@ -8,6 +8,8 @@ Changes per version: [CHANGELOG.md](CHANGELOG.md). Design spec: `openmm_orca_opi
 
 Follow-up fixes, validation and feature extensions: [TODO list](TODO.md) (Chinese; includes priorities, evidence and acceptance criteria).
 
+Next stages and completion criteria: [project roadmap](docs/plans/2026-10-15-project-roadmap.md) (Chinese), covering version closure, cutoff sensitivity, a reaction-path benchmark and performance at matched accuracy.
+
 **Current status (v0.4.0):** full-QM, QM/MM (electronic embedding, covalent boundaries with H link atoms, periodic MM with approximate cutoff embedding) and two-layer ONIOM (QM:QM, non-periodic), plus restart and failure-bundle diagnostics, are working (M0–M5 + ONIOM). Validated on a solvated enzyme (DhlA, 31,610 atoms, `examples/enzyme_qmmm.py`).
 
 ## Installation

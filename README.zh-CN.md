@@ -8,6 +8,8 @@ OpenMM 驱动的 QM/MM：**OpenMM 负责 MD**（力场、积分器、温压控�
 
 后续修复、验证与功能扩展见 [TODO 清单](TODO.md)（含优先级、证据和验收条件）。
 
+后续阶段与完成标准见 [项目路线](docs/plans/2026-10-15-project-roadmap.md)：版本收口、截断影响验证、反应路径基准及同等精度下的性能优化。
+
 **当前状态（v0.4.0）**：full-QM、QM/MM（电子嵌入，含 H link atom 共价边界、周期性 MM 的近似截断嵌入）、双层 ONIOM（QM:QM，非周期）、restart 与失败包诊断已可用（M0–M5 + ONIOM）。已在溶剂化酶体系上验证（DhlA，31,610 原子，`examples/enzyme_qmmm.py`）。
 
 ## 安装
