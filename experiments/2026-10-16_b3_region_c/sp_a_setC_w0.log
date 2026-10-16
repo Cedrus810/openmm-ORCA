@@ -1,0 +1,13 @@
+worker 0/2: 10 jobs, 10 to do
+/home/ruigengji/miniforge3/envs/openmm_dev/lib/python3.12/site-packages/openff/interchange/smirnoff/_create.py:171: PresetChargesAndVirtualSitesWarning: Preset charges were provided (via `charge_from_molecules`) alongside a force field that includes virtual site parameters. Note that virtual sites will be applied charges from the force field and cannot be given preset charges. Virtual sites may also affect the charges of their orientation atoms, even if those atoms are given preset charges.
+  warnings.warn(
+job 0 setC frame 9 step 100 set_from 9: E_QM -1227.41702059 Eh, 322 groups, t_orca 6.7 s, wall 7.3 s
+job 2 setC frame 29 step 300 set_from 29: E_QM -1227.43533271 Eh, 320 groups, t_orca 7.2 s, wall 7.6 s
+job 4 setC frame 49 step 500 set_from 49: E_QM -1227.43310550 Eh, 308 groups, t_orca 6.8 s, wall 7.4 s
+job 6 setC frame 69 step 700 set_from 69: E_QM -1227.44344141 Eh, 316 groups, t_orca 6.7 s, wall 7.2 s
+job 8 setC frame 89 step 900 set_from 89: E_QM -1227.44650688 Eh, 326 groups, t_orca 6.9 s, wall 7.4 s
+job 10 setC frame 109 step 1100 set_from 109: E_QM -1227.44640179 Eh, 318 groups, t_orca 6.8 s, wall 7.2 s
+job 12 setC frame 129 step 1300 set_from 129: E_QM -1227.47852811 Eh, 316 groups, t_orca 7.0 s, wall 7.5 s
+job 14 setC frame 149 step 1500 set_from 149: E_QM -1227.42784093 Eh, 326 groups, t_orca 6.7 s, wall 7.1 s
+job 16 setC frame 169 step 1700 set_from 169: E_QM -1227.44501832 Eh, 327 groups, t_orca 6.4 s, wall 6.9 s
+job 18 setC frame 189 step 1900 set_from 189: E_QM -1227.42435645 Eh, 326 groups, t_orca 6.8 s, wall 7.3 s

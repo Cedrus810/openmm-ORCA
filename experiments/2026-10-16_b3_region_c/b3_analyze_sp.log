@@ -1,0 +1,27 @@
+frames with all three sets: 20/20
+total force on the 14 common atoms in C(S_C): median 928, max 4165 kJ/mol/nm
+
+| comparison | common-atom ΔF RMS | ΔF max | net ΔF RMS | C1–Cl1 stretch Δ RMS (mean) | ΔE frame-to-frame std | E std of first | corr E |
+|---|---|---|---|---|---|---|---|
+| A(S_A) → A(S_C) | 147.0 | 463.6 | 246.2 | 266.3 (-254.1) | 90.3 | 430.5 | 0.981 |
+| A(S_C) → C(S_C) | 136.5 | 777.4 | 375.1 | 25.5 (+12.2) | 17.0 | 390.1 | 0.999 |
+| A(S_A) → C(S_C) | 167.0 | 705.1 | 327.3 | 253.5 (-241.9) | 90.4 | 430.5 | 0.981 |
+
+per-atom total-force difference RMS (kJ/mol/nm)
+
+| atom | A(S_A) → A(S_C) | A(S_C) → C(S_C) | A(S_A) → C(S_C) |
+|---|---|---|---|
+| ASP124:CB | 67.5 | 34.1 | 52.2 |
+| ASP124:HB2 | 23.4 | 9.2 | 18.0 |
+| ASP124:HB3 | 22.9 | 21.6 | 26.3 |
+| ASP124:CG | 238.9 | 207.1 | 220.9 |
+| ASP124:OD1 | 178.2 | 286.5 | 193.4 |
+| ASP124:OD2 | 212.6 | 63.0 | 197.4 |
+| DCE600:CL1 | 245.0 | 334.1 | 399.6 |
+| DCE600:C1 | 300.4 | 56.7 | 266.9 |
+| DCE600:C2 | 71.3 | 54.1 | 104.4 |
+| DCE600:CL2 | 71.8 | 19.7 | 76.9 |
+| DCE600:H11 | 15.0 | 23.9 | 26.2 |
+| DCE600:H12 | 31.3 | 23.3 | 33.3 |
+| DCE600:H21 | 16.7 | 18.5 | 13.7 |
+| DCE600:H22 | 26.7 | 102.2 | 107.6 |

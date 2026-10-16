@@ -1,0 +1,21 @@
+/home/ruigengji/miniforge3/envs/openmm_dev/lib/python3.12/site-packages/openff/interchange/smirnoff/_create.py:171: PresetChargesAndVirtualSitesWarning: Preset charges were provided (via `charge_from_molecules`) alongside a force field that includes virtual site parameters. Note that virtual sites will be applied charges from the force field and cannot be given preset charges. Virtual sites may also affect the charges of their orientation atoms, even if those atoms are given preset charges.
+  warnings.warn(
+/home/ruigengji/openmm-ORCA/openmmorca/backend/orca_opi.py:140: UserWarning: maxcore_mb × nprocs (2000 × 36 = 72000 MB) exceeds 75% of physical memory (95269 MB)
+  warnings.warn(
+QM region C: 61 atoms + 4 link H, method r2SCAN-3c 
+step     1  T  296.7 K  orca 38.64 s  wall 38.93 s/step  groups 318  O–C1 0.333 nm  max stable bond dev 0.4%
+
+steps                : 3 (0.002 ps), 3 in this attempt
+wall time (attempt)  : 92 s
+  t_write  mean 0.014 s, p95 0.014 s
+  t_orca   mean 24.895 s, p95 24.950 s
+  t_read   mean 0.016 s, p95 0.016 s
+  t_total  mean 24.930 s, p95 24.986 s
+embedding groups     : 319 mean, 1 steps with crossings
+n_fresh_retries      : 0
+T (last 3 steps)    : 294.3 ± 1.9 K
+max QM bond deviation: 1.1 %
+max stable bond dev  : 1.1 %
+max reaction bond dev: 0.0 %
+smoke checks          : PASS
+Task 22 acceptance   : NOT_EVALUATED

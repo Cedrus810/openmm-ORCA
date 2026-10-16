@@ -1,0 +1,6 @@
+2026-10-16T12:34:18+09:00 run_sp_c.sh 813463: w0 pid 813465, w1 pid 813466
+2026-10-16T12:40:40+09:00 183 run_md_c.sh: wrapper bash 9937, run_md_c.sh 9938, python 9939 (recorded by hand; ssh launcher hung, output held by 9937)
+2026-10-16T12:41:58+09:00 run_sp_a_setC.sh launcher pid 829134 (waits for 813463)
+2026-10-16T12:45:13+09:00 run_sp_a_setC.sh 829134: w0 pid 834975, w1 pid 834976
+2026-10-16T12:46:55+09:00 run_sp_a_setC.sh 837235: w0 pid 837237, w1 pid 837238
+2026-10-16T23:16:10+09:00 183 run_md_c_2000.sh pid 251145 (setsid -f, exec'd from bash)
