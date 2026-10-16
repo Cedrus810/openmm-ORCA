@@ -11,3 +11,7 @@ dist/
 nve_cluster.csv
 oniom_cluster.csv
 *.dcd
+
+# 项目本地文件
+.commit_drafts/
+researchd.plan.toml
