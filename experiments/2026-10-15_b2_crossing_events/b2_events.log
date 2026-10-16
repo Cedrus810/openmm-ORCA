@@ -1,0 +1,10 @@
+/home/ruigengji/miniforge3/envs/openmm_dev/lib/python3.12/site-packages/openff/interchange/smirnoff/_create.py:171: PresetChargesAndVirtualSitesWarning: Preset charges were provided (via `charge_from_molecules`) alongside a force field that includes virtual site parameters. Note that virtual sites will be applied charges from the force field and cannot be given preset charges. Virtual sites may also affect the charges of their orientation atoms, even if those atoms are given preset charges.
+  warnings.warn(
+alignment: {'row = frame step + 0': '174/200 group counts match', 'row = frame step + 1': '200/200 group counts match'}
+steps.csv: 312 steps with crossings, 337 group changes (step 1 excluded)
+DCD frame pairs: 162 intervals with a set change, 297 net group changes
+intervals where steps.csv count != net frame-pair change (back-and-forth inside 10 steps): 19
+crossing groups: 40 charged, 257 neutral; labels: ['ALA169', 'ALA195', 'ARG193', 'ASP81', 'GLN216', 'GLU94', 'GLY84', 'GLY86', 'HOH2494', 'HOH2715', 'HOH3018', 'HOH3062', 'HOH3157', 'HOH3317', 'HOH3338', 'HOH3366', 'HOH3797', 'HOH408', 'HOH425', 'HOH427', 'HOH435', 'HOH436', 'HOH437', 'HOH446', 'HOH450', 'HOH456', 'HOH6013', 'HOH6524', 'HOH6601', 'HOH6756', 'HOH7235', 'HOH7281', 'HOH7445', 'HOH7531', 'LEU120', 'LEU133', 'LEU144', 'LEU51', 'LYS259', 'MET254', 'MET66', 'PHE105', 'PRO159', 'PRO265', 'PRO80', 'SER237', 'THR132', 'THR181', 'THR98', 'TYR61']
+jobs: 740 (base 192, swap 324, one 224), frames used 192
+dcdplugin) detected standard 32-bit DCD file of native endianness
+dcdplugin) CHARMM format DCD file (also NAMD 2.1 and later)
