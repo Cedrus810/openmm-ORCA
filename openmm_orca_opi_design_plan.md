@@ -210,6 +210,7 @@ pcgrad x_pc1  = 0.012533896858 Eh/bohr
 - 有 `setUsesPeriodicBoundaryConditions(bool)`：设为 True 后，传入的 `State` 可取得周期盒向量（M5 需要）。
 - `setForceGroup` / `setName` 可用。
 - （2026-09-27 实测补充）`state.getPositions(asNumpy=True)` 返回带单位的 Quantity，回调内需 `.value_in_unit(unit.nanometer)` 剥离；回调抛出的 Python 异常穿过 C++ 层后以 `openmm.OpenMMException` 抛出（原始消息保留，类型不保留）；返回的力数组单位为 kJ/mol/nm。包含 PythonForce 的 System 不能 XML 序列化。
+- （2026-10-14 实测补充）**进程中还没有任何 Context 调用过 `setPositions` 时，第一次计算 PythonForce 会段错误**，在 `loadCheckpoint` 或 `setState` 之后也一样（Reference/CPU/CUDA 都会，纯 OpenMM 8.5.2 可复现）。新进程续跑之前要先 `setPositions` 一次。见 `docs/validation/2026-10-14-t07-orca-resume.md`。
 - （2026-09-27 实测补充，虚拟位点）OpenMM **会**把 PythonForce 返回数组中虚拟位点上的力按权重分配到母原子（Reference 平台实测）；但 **`Context.setPositions` 不重算虚拟位点坐标**（坐标只由积分器在 `step()` 时维护），所以能量/力的有限差分测试必须整体平移含虚拟位点的分子。为不依赖平台行为差异，回调（`force.py`）自行把虚拟位点力分配到母原子并把位点自身力清零，两种路径结果一致。
 
 ### 2.9 openmm-pyscf 参考实现中需要修正的两处
@@ -727,6 +728,8 @@ E = Σ_{a<b ∈ QM} ½ k (|R_a − R_b| − r0_ab)² + Σ_{a ∈ QM, j ∈ emb} 
 ### 13.4 与 PySCF 交叉验证（可选，推荐）
 
 同一 QM 几何 + 同一组点电荷，HF/STO-3G 或 HF/def2-SVP，比较能量、QM 梯度、点电荷梯度。需在单独环境中安装 pyscf（不污染 `openmm_dev`）。差异应在 1e-6 Eh 量级（积分精度差异）。
+
+2026-10-14 已完成（HF/def2-SVP，Task 3 的 H2O + 2 个点电荷，PySCF 2.14.0 独立环境）：能量差 5e-10 Eh；QM 梯度差 ≤ 3.2e-7 Eh/bohr（ORCA 默认 SCF）或 ≤ 5.7e-8（VeryTightSCF）；点电荷梯度差 ≤ 6.8e-8 或 ≤ 3.3e-9 Eh/bohr。ORCA 默认 HF 不用 RI/COSX。见 `docs/validation/2026-10-14-t08-pyscf-crosscheck.md`。
 
 ---
 

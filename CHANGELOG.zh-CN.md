@@ -4,6 +4,16 @@
 
 版本号对应 `docs/plans/2026-09-26-openmm-orca-implementation-plan.md` 的里程碑（M2 = v0.1，M3 = v0.2，M4 = v0.3，M5 = v0.4）。
 
+## 未发布 — 2026-10-14
+
+### 修复
+- 酶示例：`--resume checkpoint|state` 在新进程中不再段错误。OpenMM 8.5.2 在进程中还没有任何 Context 调用过 `setPositions` 时，第一次计算 `PythonForce` 会崩；`restore_checkpoint` 现在会在加载之前先设置占位坐标。回归测试在子进程中续跑。
+- 酶示例：平衡缓存仍然记录平台属性 `TempDirectory`、`DeviceIndex`、`DeviceName`、`UseBlockingSync`，但不再拿它们做比较。修改 `TMPDIR` 不会再导致合法缓存被拒绝。
+
+### 验证
+- PySCF 交叉验证（TODO T08）：见 `docs/validation/2026-10-14-t08-pyscf-crosscheck.md`。
+- DhlA 固定快照上的嵌入截断扫描（TODO T09 第 1 项）：见 `docs/validation/2026-10-14-t09-cutoff-scan.md`。
+
 ## 未发布 — 2026-10-05
 
 ### 修复

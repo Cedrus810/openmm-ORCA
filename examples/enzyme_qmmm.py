@@ -196,6 +196,11 @@ def preparation_cache(outdir):
     })
 
 
+# Platform properties that do not change the computed trajectory (temporary
+# directory, device choice, CPU wait mode): recorded, but do not block reuse.
+NON_NUMERIC_PLATFORM_PROPERTIES = ("TempDirectory", "DeviceIndex", "DeviceName", "UseBlockingSync")
+
+
 def equilibration_cache(outdir, pdb, system, platform):
     return StageCache(outdir / "equilibrated.xml", {
         "stage": "equilibrate", "prepared_sha256": sha256_file(outdir / "prepared.pdb"),
@@ -205,7 +210,7 @@ def equilibration_cache(outdir, pdb, system, platform):
             name: platform.getPropertyDefaultValue(name) for name in platform.getPropertyNames()
         }},
         "versions": dependency_versions(),
-    })
+    }, ignored=tuple(f"platform.properties.{name}" for name in NON_NUMERIC_PLATFORM_PROPERTIES))
 
 
 def state_observations(state, topology):
@@ -581,6 +586,11 @@ def restore_checkpoint(outdir, record, simulation, mode):
     path = outdir / checkpoint[f"{key}_file"]
     if not path.is_file() or sha256_file(path) != checkpoint[f"{key}_sha256"]:
         raise RunMismatchError(f"{path} is missing or does not match run.json")
+    # OpenMM 8.5.2: in a process where no Context has ever called setPositions,
+    # the first PythonForce evaluation segfaults, also after loadCheckpoint or
+    # setState (docs/validation/2026-10-14-t07-orca-resume.md). The checkpoint
+    # or State loaded below overwrites these placeholder positions.
+    simulation.context.setPositions(np.zeros((simulation.system.getNumParticles(), 3)))
     if mode == "checkpoint":
         platform = simulation.context.getPlatform().getName()
         if (checkpoint["platform"], checkpoint["openmm"]) != (platform, mm.__version__):

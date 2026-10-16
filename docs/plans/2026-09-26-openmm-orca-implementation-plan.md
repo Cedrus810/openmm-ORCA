@@ -1194,9 +1194,11 @@ QMMMCallback.__init__(..., embedding: CutoffEmbedding | None = None, qm_graph: d
 
 对应 spec §13.4。不属于任何里程碑的验收条件，建议在 M2 之后做一次：
 
-- [ ] 新建一个独立环境（不要装进 `openmm_dev`），安装 `pyscf`
-- [ ] 用 Task 3 的 H2O + 2 个点电荷几何，在 PySCF 中计算 HF/def2-SVP 的能量、QM 梯度和点电荷梯度（`pyscf.qmmm.mm_charge`，其 `grad_hcore_mm + grad_nuc_mm` 即为点电荷梯度，参见 `/home/ruigengji/openmm-pyscf/openmmpyscf/pyscfforce.py` 第 547–552 行）
-- [ ] 与 Task 3 的 fixture 比较：能量差应在 1e-6 Eh 量级，梯度差在 1e-5 Eh/bohr 量级。把结果写进 spec §13.4
+- [x] 新建一个独立环境（不要装进 `openmm_dev`），安装 `pyscf`
+- [x] 用 Task 3 的 H2O + 2 个点电荷几何，在 PySCF 中计算 HF/def2-SVP 的能量、QM 梯度和点电荷梯度（`pyscf.qmmm.mm_charge`，其 `grad_hcore_mm + grad_nuc_mm` 即为点电荷梯度，参见 `/home/ruigengji/openmm-pyscf/openmmpyscf/pyscfforce.py` 第 547–552 行）
+- [x] 与 Task 3 的 fixture 比较：能量差应在 1e-6 Eh 量级，梯度差在 1e-5 Eh/bohr 量级。把结果写进 spec §13.4
+
+> **附录 C 完成（2026-10-14）**：使用 kasuga02 上已有的 `pyscf-env`（PySCF 2.14.0）。结果见 spec §13.4 与 `docs/validation/2026-10-14-t08-pyscf-crosscheck.md`。
 
 ## 附录 A：常用命令
 

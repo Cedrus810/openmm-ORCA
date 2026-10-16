@@ -122,6 +122,22 @@ def test_cache_rejects_legacy_incomplete_or_modified_data(tmp_path, problem):
         cache.load()
 
 
+def test_cache_ignored_fields_are_recorded_but_do_not_block_reuse(tmp_path):
+    artifact = tmp_path / "stage.txt"
+    artifact.write_text("data")
+    identity = {"platform": {"properties": {"TempDirectory": "/tmp", "Precision": "single"}}}
+    ignored = ("platform.properties.TempDirectory",)
+    StageCache(artifact, identity, ignored).store({})
+    identity["platform"]["properties"]["TempDirectory"] = "/dev/shm"
+    assert StageCache(artifact, identity, ignored).load() is not None
+    # A manifest written before the field was ignored (or without it) is still reusable.
+    del identity["platform"]["properties"]["TempDirectory"]
+    assert StageCache(artifact, identity, ignored).load() is not None
+    identity["platform"]["properties"]["Precision"] = "double"
+    with pytest.raises(CacheMismatchError, match=r"identity.platform.properties.Precision"):
+        StageCache(artifact, identity, ignored).load()
+
+
 @pytest.fixture
 def prepared_water(tmp_path, monkeypatch):
     monkeypatch.setattr(enzyme, "dependency_versions", lambda: {"openmm": mm.__version__})
@@ -206,6 +222,14 @@ def test_equilibration_identity_tracks_system_and_prepared_order(prepared_water,
     atoms[1].name, atoms[2].name = atoms[2].name, atoms[1].name
     changed = enzyme.equilibration_cache(tmp_path, prepared_water, system, platform).identity
     assert changed["prepared"]["topology_sha256"] != original["prepared"]["topology_sha256"]
+
+
+def test_equilibration_cache_ignores_only_non_numeric_platform_properties(prepared_water, tmp_path):
+    ff = app.ForceField("tip3p.xml")
+    platform = mm.Platform.getPlatformByName("Reference")
+    cache = enzyme.equilibration_cache(tmp_path, prepared_water, enzyme.mm_system(prepared_water.topology, ff), platform)
+    assert cache.ignored == {f"identity.platform.properties.{name}" for name in
+                             ("TempDirectory", "DeviceIndex", "DeviceName", "UseBlockingSync")}
 
 
 def test_equilibration_state_rejects_particle_count_mismatch(prepared_water, tmp_path):
@@ -398,6 +422,69 @@ def test_state_resume_restarts_from_state_with_new_seed(tmp_path, monkeypatch):
     assert final_arrays(resumed)[2] == 30
     # New Langevin noise: a State restart is not the uninterrupted trajectory.
     assert not np.array_equal(final_arrays(reference)[0], final_arrays(resumed)[0])
+
+
+RESTORE_SCRIPT = """
+import json, sys
+from pathlib import Path
+import numpy as np
+import openmm as mm
+import openmm.app as app
+from openmm import unit
+sys.path.insert(0, sys.argv[1])
+from examples import enzyme_qmmm as enzyme
+
+phase, outdir, mode = sys.argv[2], Path(sys.argv[3]), sys.argv[4]
+
+def compute(state):
+    pos = state.getPositions(asNumpy=True).value_in_unit(unit.nanometer)
+    return 0.5 * float((pos ** 2).sum()), -pos
+
+topology = app.Topology()
+residue = topology.addResidue("X", topology.addChain())
+system = mm.System()
+for _ in range(4):
+    topology.addAtom("H", app.Element.getBySymbol("H"), residue)
+    system.addParticle(1.0)
+system.addForce(mm.PythonForce(compute))
+integrator = mm.LangevinMiddleIntegrator(300, 1, 0.001)
+simulation = app.Simulation(topology, system, integrator, mm.Platform.getPlatformByName("Reference"))
+if phase == "write":
+    simulation.context.setPositions(np.eye(4, 3) * 0.1)
+    simulation.step(5)
+    (outdir / "c.chk").write_bytes(simulation.context.createCheckpoint())
+    state = simulation.context.getState(getPositions=True, getVelocities=True)
+    (outdir / "s.xml").write_text(mm.XmlSerializer.serialize(state))
+    record = {"checkpoint": {"step": 5, "checkpoint_file": "c.chk", "state_file": "s.xml",
+              "checkpoint_sha256": enzyme.sha256_file(outdir / "c.chk"),
+              "state_sha256": enzyme.sha256_file(outdir / "s.xml"),
+              "platform": "Reference", "openmm": mm.__version__}}
+    (outdir / "record.json").write_text(json.dumps(record))
+else:
+    record = json.loads((outdir / "record.json").read_text())
+    assert enzyme.restore_checkpoint(outdir, record, simulation, mode) == 5
+    simulation.step(2)
+    print("RESUMED OK", flush=True)
+"""
+
+
+@pytest.mark.parametrize("mode", ["checkpoint", "state"])
+def test_restore_in_fresh_process_survives_pythonforce(tmp_path, mode):
+    # OpenMM 8.5.2 segfaults on the first PythonForce evaluation in a process that
+    # never called Context.setPositions; pytest itself already has, so the resume
+    # must run in a fresh interpreter (docs/validation/2026-10-14-t07-orca-resume.md).
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    script = tmp_path / "restore.py"
+    script.write_text(RESTORE_SCRIPT)
+    root = str(Path(enzyme.__file__).resolve().parents[1])
+    for phase in ("write", "load"):
+        result = subprocess.run([sys.executable, str(script), root, phase, str(tmp_path), mode],
+                                capture_output=True, text=True, timeout=300)
+        assert result.returncode == 0, (phase, result.returncode, result.stderr[-2000:])
+    assert "RESUMED OK" in result.stdout
 
 
 def test_completed_run_can_be_extended_but_not_rerun(tmp_path, monkeypatch):

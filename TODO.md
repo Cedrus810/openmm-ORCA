@@ -1,17 +1,23 @@
 # OpenMM–ORCA 后续 TODO
 
-更新：2026-10-05（Asia/Tokyo）；审查基线：`main`，`d1ff991`（2026-10-05 历史重写后的哈希；本清单 T01–T07 所列改动已于当日拆分提交并推送），源码 v0.4.0。
+更新：2026-10-15（Asia/Tokyo）；源码 v0.4.0。历史审查基线：`main`，`d1ff991`（2026-10-05 历史重写后的哈希）；2026-10-14 修复与实验另见对应验证记录，当前工作区仍有未提交改动。
 
 P1 优先修复已确认的使用问题；P2 补齐可复现性、验证与维护；P3 为按应用需求选择的功能扩展。勾选任务必须附提交或结果路径；测试跳过、文档中的历史 PASS、SCF 收敛均不能代替相应验收。
 
-## 当前状态（2026-10-05）
+后续路线与阶段完成标准见 [2026-10-15 项目计划](docs/plans/2026-10-15-project-roadmap.md)：版本收口 → 截断问题定性定量 → 反应路径基准 → 同等精度下的性能优化。
+
+## 当前状态（2026-10-15，结果截至 2026-10-14）
 
 | 项目 | 状态 |
 |---|---|
 | T01–T05 | 完成 |
 | T06 | 完成 |
-| T07 | 完成；ORCA 上的中断续跑未实测 |
-| T08–T16 | 未开始 |
+| T07 | 完成。2026-10-14 实测 ORCA + CUDA 中断续跑，发现新进程续跑段错误（OpenMM 8.5.2 PythonForce，进程中未 `setPositions` 即算力），已修复；修复后续跑完成，与不中断运行差 ≤ 5e-6 nm。见 [T07 续跑记录](docs/validation/2026-10-14-t07-orca-resume.md) |
+| T08 | 完成（2026-10-14） |
+| T09 | 第 1 项（固定快照 cutoff 扫描）已跑，见 [T09 记录](docs/validation/2026-10-14-t09-cutoff-scan.md)；其余未开始 |
+| T10–T16 | 未开始 |
+
+以下表格为 2026-10-05 已归档的验证，本次文档整理没有重跑；2026-10-14 的续跑、PySCF 和 cutoff 结果见上表及对应记录。
 
 | 验证 | 结果 |
 |---|---|
@@ -27,8 +33,8 @@ P1 优先修复已确认的使用问题；P2 补齐可复现性、验证与维�
 ## 当前已有的能力
 
 - M0–M5 与双层 QM:QM ONIOM 已有实现。full-QM、电子嵌入、link atom、截断周期嵌入、MORead restart、失败包不再列为待开发项。
-- 原实施计划唯一仍未勾选的部分是可选 PySCF 交叉验证（附录 C）。其余下列事项包含审查发现与新建议，不代表 M0–M5 全部未完成。
-- ORCA 运行使用本地 `/home/kasuga/orca_6_1_1_linux_x86-64_shared_openmpi418_avx2`（与 NFS 上 `/home/ruigengji/ORCA611` 为同一 6.1.1 构建），运行产物放在 `/home/kasuga/openmm-orca-runs/`。
+- 原实施计划含可选 PySCF 交叉验证（附录 C）已完成；其余下列事项包含审查发现与新建议，不代表 M0–M5 全部未完成。
+- ORCA 使用所选机器的本地安装；2026-10-05 及以前的产物在 `/home/kasuga/openmm-orca-runs/`，2026-10-14 起的新实验在 `experiments/<日期>_<主题>/`，环境与 scratch 约束见 `CLAUDE.md`。
 
 ## P1：优先修复
 
@@ -64,7 +70,7 @@ P1 优先修复已确认的使用问题；P2 补齐可复现性、验证与维�
 - [x] `steps.csv` 每步写入并 flush；注入失败后仍保留已完成行，使用 `try/finally` 关闭 backend。`acceptance.json` 的运行／失败状态避免沿用旧 PASS。证据见本次修复记录。
 - [x] 增加最终结构/State，以及周期 checkpoint 和运行状态（running / completed / failed）；明确覆盖、追加与续跑规则。`final_state.xml`/`final.pdb`；`--checkpoint-interval` 写 `.chk` + State XML，经 `run.json` 原子提交；已有运行产物时拒绝新运行，`--archive-existing` 归档；checkpoint 后的行另存 superseded；输出目录 flock。
 - [x] 如实现续跑，重建 PythonForce 与 backend，并校验配置；区分 OpenMM checkpoint、可移植 State 与 `.gbw` 初猜的恢复能力。当前 SCF restart 不是跨进程 MD 续跑。`--resume checkpoint|state` 校验运行身份（起始 State、拓扑、MM System、QM 设置、配方）与 CSV 前缀哈希；`.gbw` 不跨进程保留，续跑首步为 fresh SCF（见 `examples/enzyme_qmmm.py` 模块说明）。
-- [x] 验收：注入中途失败后仍能读取已完成日志和恢复文件；续跑不覆盖历史步骤。声称轨迹一致恢复时须实测积分器/RNG 状态，否则明确仅为 State 起跑。`tests/test_enzyme_workflow.py` T04 部分：checkpoint 续跑与不中断运行的最终坐标／速度及逐步物理量逐位一致（确定性 fake 后端、Reference）；State 续跑经测试确认与原轨迹不同。ORCA 与 CUDA 上的续跑未实测（归 T07）。证据：[T04／T05 验证记录](docs/validation/2026-10-05-t04-t05.md)。
+- [x] 验收：注入中途失败后仍能读取已完成日志和恢复文件；续跑不覆盖历史步骤。声称轨迹一致恢复时须实测积分器/RNG 状态，否则明确仅为 State 起跑。`tests/test_enzyme_workflow.py` T04 部分：checkpoint 续跑与不中断运行的最终坐标／速度及逐步物理量逐位一致（确定性 fake 后端、Reference）；State 续跑经测试确认与原轨迹不同。2026-10-05 时尚未实测 ORCA/CUDA 续跑，见 [T04／T05 验证记录](docs/validation/2026-10-05-t04-t05.md)；2026-10-14 已补 checkpoint 实测（非逐位一致），真实 ORCA 的 State 续跑仍待验证，见 [T07 记录](docs/validation/2026-10-14-t07-orca-resume.md)。
 
 依据：[酶示例](examples/enzyme_qmmm.py)，[scratch 清理](openmmorca/runtime/scratch.py)，[SCF restart](openmmorca/runtime/restart.py)。
 
@@ -96,16 +102,16 @@ P1 优先修复已确认的使用问题；P2 补齐可复现性、验证与维�
 
 ### T08 — 完成可选 PySCF 独立交叉验证
 
-- [ ] 在独立环境用同一 H2O + 2 点电荷几何、HF/def2-SVP 比较能量、QM 梯度和点电荷梯度。
-- [ ] 保存输入、版本、SCF/积分设置、数组及逐分量差异；记录单位和力/梯度符号。
-- [ ] 验收：按原附录 C 的预期量级核对（能量约 1e-6 Eh，梯度约 1e-5 Eh/bohr）；超出时解释并排查设置，不自动放宽阈值。
+- [x] 在独立环境用同一 H2O + 2 点电荷几何、HF/def2-SVP 比较能量、QM 梯度和点电荷梯度。PySCF 2.14.0（kasuga02 的 `pyscf-env`，没有装进 `openmm_dev`）对照 ORCA 6.1.1（经 `ORCAOPIBackend`）。
+- [x] 保存输入、版本、SCF/积分设置、数组及逐分量差异；记录单位和力/梯度符号。`experiments/2026-10-14_t08_pyscf_crosscheck/`（`comparison.json` 与两组 ORCA 的 `qm.inp`/`qm.out`）。
+- [x] 验收：按原附录 C 的预期量级核对（能量约 1e-6 Eh，梯度约 1e-5 Eh/bohr）；超出时解释并排查设置，不自动放宽阈值。2026-10-14：ΔE 5e-10 Eh；QM 梯度差最大 3.2e-7（默认 SCF）或 5.7e-8（VeryTightSCF）；点电荷梯度差最大 6.8e-8 或 3.3e-9 Eh/bohr。证据：[T08 记录](docs/validation/2026-10-14-t08-pyscf-crosscheck.md)。
 
-依据：[实施计划附录 C](docs/plans/2026-09-26-openmm-orca-implementation-plan.md#附录-c可选与-pyscf-交叉验证)。该项明确尚未勾选。
+依据：[实施计划附录 C](docs/plans/2026-09-26-openmm-orca-implementation-plan.md#附录-c可选与-pyscf-交叉验证)。该项已于 2026-10-14 勾选完成。
 
 ### T09 — 测量截断与 QM 区选择的影响
 
-- [ ] 在同一批固定快照上比较多个满足盒宽约束的 embedding cutoff，报告 QM/关键 MM 原子的力与能量差；分析组进出事件附近的跳变。
-- [ ] DhlA 方案 C（65 原子、4 个 link）有选择代码，但未找到与方案 A 同等的完整验收记录；先做单点/短跑，再决定是否跑完整应用。
+- [ ] 在同一批固定快照上比较多个满足盒宽约束的 embedding cutoff，报告 QM/关键 MM 原子的力与能量差；分析组进出事件附近的跳变。2026-10-14：20 帧 × 0.8–2.5 nm 已完成，到 2.5 nm 仍未见收敛（2.0 nm 相对 2.5 nm 的 QM 力 RMS 差 87 kJ/mol/nm）；跳变只用 1.2/1.25 nm 间接估计（每组中位 2.6 kJ/mol），没有对照真实进出事件，所以这一项不勾。见 [T09 记录](docs/validation/2026-10-14-t09-cutoff-scan.md)。2026-10-15 路线 B1 分解：能量差来自远处带电组的经典静电，反应键 C1–Cl1 的力受远场电场极化，见 [B1 记录](docs/validation/2026-10-15-b1-embedding-charge.md)。2026-10-15 路线 B2 对照了真实进出事件：带电组一次跳变 70–90 kJ/mol（中性组约 2），QM 力最多跳 126 kJ/mol/nm，见 [B2 记录](docs/validation/2026-10-15-b2-crossing-events.md)。至此这一项的固定快照和真实事件部分都已有证据；QM 区和方法的影响（B3）未做，所以 T09 整体不勾。
+- [ ] DhlA 方案 C（65 原子、4 个 link）有选择代码，但未找到与方案 A 同等的完整验收记录；先做单点/短跑，再决定是否跑完整应用。2026-10-16：20 帧匹配单点和 500 步短跑都已完成（29 s/步），完整应用尚未决定，见 [B3 记录](docs/validation/2026-10-16-b3-region-c.md)。
 - [ ] 比较边界位置、QM 方法与区域选择对反应坐标的影响；涉及反应势垒或自由能时另立参考与采样设计。
 - [ ] 验收：提供匹配快照的比较表、误差/差异指标及耗时；区分运行稳定性与科学结论。不同 QM 区不能直接比较绝对总能量并将其当作精度差。
 
@@ -149,11 +155,14 @@ P1 优先修复已确认的使用问题；P2 补齐可复现性、验证与维�
 
 ## 建议执行顺序与复核命令
 
-T01–T07 已完成；ORCA 上的中断续跑尚未实测。T08–T10 在科学应用扩大前完成。T11 的并发/超时审查可独立进行，T12 保持后续回归。T13–T16 按实际应用需求排期。
+T01–T08 已有完成记录。下一步按 [项目计划](docs/plans/2026-10-15-project-roadmap.md) 执行（2026-10-15 用户确认的优先级）：T09 截断诊断是主线（路线 B1、B2 已完成，接着 B3），同时做 T11 运行时边界；T10 在反应基准需要电子态诊断前完成；T12/版本收口穿插推进。随后建立一个有参考的反应路径基准，再按相同精度优化性能。T13–T16 按证据和实际用途选择。
+
+T07 的真实 ORCA/CUDA checkpoint 续跑已实测；State 续跑的真实 ORCA 验证和旧 attempt 状态列入项目计划阶段 A。历史测试通过数不代表当前全部未提交改动已重新验证。
 
 ```bash
 export PY=/home/ruigengji/miniforge3/envs/openmm_dev/bin/python
-export OPI_ORCA=/home/ruigengji/ORCA611
+export OPI_ORCA=/home/kasuga/orca_6_1_1_linux_x86-64_shared_openmpi418_avx2
+export TMPDIR=/dev/shm
 
 # 快速纯软件回归
 $PY -m pytest -m 'not orca and not slow' -q
@@ -168,4 +177,4 @@ $PY -m pytest -m slow -v -rs
 $PY -m pytest tests/test_orca_mpi.py -m orca -v -rs
 ```
 
-T05 的重装只在选定的开发环境执行；测试结果与运行产物按 T06 归档。本次仅执行本地软件回归与真实 ORCA 快速测试，未安装依赖或发布版本。
+T05 的重装只在选定的开发环境执行；测试结果与运行产物按 T06 归档。以上命令是复核入口，ORCA 路径需对应实际执行机器；2026-10-15 本次仅整理计划，没有运行测试、安装依赖或发布版本。

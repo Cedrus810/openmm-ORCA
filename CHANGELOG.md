@@ -4,6 +4,16 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 
 Versions follow the milestones of `docs/plans/2026-09-26-openmm-orca-implementation-plan.md` (M2 = v0.1, M3 = v0.2, M4 = v0.3, M5 = v0.4).
 
+## Unreleased — 2026-10-14
+
+### Fixed
+- Enzyme example: `--resume checkpoint|state` no longer segfaults in a new process. OpenMM 8.5.2 crashes on the first `PythonForce` evaluation in a process where no Context has called `setPositions`; `restore_checkpoint` now sets placeholder positions before loading. Regression test runs the resume in a subprocess.
+- Enzyme example: the equilibration cache records but no longer compares the platform properties `TempDirectory`, `DeviceIndex`, `DeviceName` and `UseBlockingSync`. Changing `TMPDIR` no longer rejects a valid cache.
+
+### Validation
+- PySCF cross-check (TODO T08): see `docs/validation/2026-10-14-t08-pyscf-crosscheck.md`.
+- Embedding cutoff scan on fixed DhlA snapshots (TODO T09, item 1): see `docs/validation/2026-10-14-t09-cutoff-scan.md`.
+
 ## Unreleased — 2026-10-05
 
 ### Fixed

@@ -69,10 +69,15 @@ def different_fields(expected, actual, prefix="") -> list[str]:
 
 
 class StageCache:
-    """Artifact + sidecar manifest. Legacy or mismatched caches fail closed."""
+    """Artifact + sidecar manifest. Legacy or mismatched caches fail closed.
 
-    def __init__(self, artifact: Path, identity: dict):
+    *ignored* lists dotted identity fields (e.g. "platform.properties.TempDirectory")
+    that are recorded in the manifest but do not decide reuse.
+    """
+
+    def __init__(self, artifact: Path, identity: dict, ignored: tuple[str, ...] = ()):
         self.artifact = Path(artifact)
+        self.ignored = {f"identity.{field}" for field in ignored}
         self.manifest = self.artifact.with_name(self.artifact.name + ".manifest.json")
         # Freeze the identity, so later changes to recipe dictionaries cannot
         # silently change the identity associated with an in-progress stage.
@@ -97,7 +102,8 @@ class StageCache:
             self.reject("unsupported manifest schema")
         if not isinstance(data.get("identity"), dict) or not isinstance(data.get("observations"), dict):
             self.reject("manifest identity or observations missing")
-        different = different_fields(self.identity, data["identity"], "identity")
+        different = [f for f in different_fields(self.identity, data["identity"], "identity")
+                     if f not in self.ignored]
         if different:
             self.reject("changed fields: " + ", ".join(different))
         if data.get("artifact_sha256") != sha256_file(self.artifact):
