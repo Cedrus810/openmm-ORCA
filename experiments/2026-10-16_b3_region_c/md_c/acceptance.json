@@ -1,0 +1,16 @@
+{
+  "kind": "full",
+  "status": "PASS",
+  "task22_acceptance": "PASS",
+  "completed_steps": 2000,
+  "requested_steps": 2000,
+  "duration_ps": 1.0,
+  "temperature_samples": 500,
+  "temperature_mean_K": 301.0222849568015,
+  "temperature_std_K": 1.0836373507633832,
+  "max_stable_bond_deviation": 0.17219535746982628,
+  "max_qm_bond_deviation": 0.17219535746982628,
+  "reaction_bonds": [],
+  "max_reaction_bond_deviation": 0.0,
+  "attempts": 2
+}
