@@ -1,0 +1,10 @@
+frames: 20
+
+| X | QM ΔE_X frame std (kJ/mol) | classical ΔU_X frame std | std(ΔE − ΔU) | corr | QM Δstretch RMS (mean) (kJ/mol/nm) | classical Δ bond field RMS (mean) |
+|---|---|---|---|---|---|---|
+| S0 | 83.4 | 82.4 | 4.9 | 0.998 | 311.4 (+299.8) | 218.7 (+214.3) |
+| S1 | 50.8 | 51.8 | 1.1 | 1.000 | 47.7 (+45.1) | 36.0 (+34.7) |
+
+β (QM stretch per classical bond-axis field, S0/S1 → S2 pooled): 1.41; corr +0.974; residual RMS 32.3 kJ/mol/nm
+remaining S2 error (estimate): energy frame std 4.1 kJ/mol; bond-axis field 28.0 (mean -27.5); stretch β·Δb RMS 39.3 (mean -38.7) kJ/mol/nm
+S2 t_orca: mean 8.7 s, range 8.5–8.8 s (181, np18)

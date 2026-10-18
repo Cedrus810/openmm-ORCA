@@ -1,0 +1,25 @@
+frame 0: 1 s
+frame 50: 29 s
+frame 100: 59 s
+frame 150: 88 s
+frame 200: 117 s
+
+Ewald self-check (alpha 1.2/n14 vs 1.6/n20): [{'frame': 0, 'max_dphi': 4.009308232374072e-07, 'max_dfield': 1.288370992824639e-05, 'field_scale': 1963.5210268062638}, {'frame': 100, 'max_dphi': 3.976381018825729e-07, 'max_dfield': 1.030124212775263e-05, 'field_scale': 1981.7671862017482}, {'frame': 200, 'max_dphi': 4.7642549816373503e-07, 'max_dfield': 9.243682598025771e-06, 'field_scale': 2321.1035904173564}]
+
+### Accuracy vs Ewald (201 frames)
+
+| scheme | mean groups | site force error RMS (kJ/mol/nm) | max | C1–Cl1 bond-axis field error RMS (kJ/mol/nm/e) | mean | U error frame-to-frame std (kJ/mol) |
+|---|---|---|---|---|---|---|
+| S0 | — | 86.4 | 232.6 | 243.8 | +240.3 | 87.9 |
+| S1 | — | 42.1 | 112.5 | 63.7 | +62.9 | 45.9 |
+| S2 | — | 26.2 | 64.1 | 28.3 | +27.7 | 4.3 |
+| S5 | — | 59.8 | 145.4 | 124.6 | +123.1 | 11.3 |
+
+### Jumps between consecutive frames (fixed geometry; 1.0 ps)
+
+| scheme | intervals with a change | group changes | |ΔU| median / p90 / max (kJ/mol) | site force jump max: median / p90 / max | |Δ bond field| median / p90 / max |
+|---|---|---|---|---|---|
+| S0 | 162 | 297 | 2.77 / 79.12 / 158.04 | 4.23 / 38.16 / 59.78 | 2.64 / 23.20 / 64.19 |
+| S1 | 200 | 3086 | 1.67 / 54.54 / 146.95 | 1.45 / 24.22 / 33.74 | 0.74 / 20.38 / 26.88 |
+| S2 | 200 | 3990 | 1.05 / 2.60 / 6.28 | 0.64 / 0.97 / 10.87 | 0.32 / 0.75 / 12.56 |
+| S5 | 153 | 259 | 2.14 / 4.96 / 10.52 | 3.37 / 6.94 / 10.29 | 2.15 / 4.79 / 11.83 |
