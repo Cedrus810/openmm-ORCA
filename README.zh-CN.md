@@ -8,6 +8,8 @@ OpenMM 驱动的 QM/MM：**OpenMM 负责 MD**（力场、积分器、温压控�
 
 后续修复、验证与功能扩展见 [TODO 清单](TODO.md)（含优先级、证据和验收条件）。
 
+最新进度（2026-11-07）：[C2 首批匹配单点](docs/validation/2026-11-07-c2-matched-pilot.md)。3 构型在对齐后的 PySCF 周期 MM 参考下，相对嵌入偏差为 −10.26/−16.09 kJ/mol，超出固定构型筛查目标；暂停扩大，5 kJ/mol 目标保持。窗口统计与 TS 认证仍待完成。
+
 后续阶段与完成标准见 [项目路线](docs/plans/2026-10-15-project-roadmap.md)：版本收口、截断影响验证、反应路径基准及同等精度下的性能优化。
 
 **当前状态（v0.4.0）**：full-QM、QM/MM（电子嵌入，含 H link atom 共价边界、周期性 MM 的近似截断嵌入）、双层 ONIOM（QM:QM，非周期）、restart 与失败包诊断已可用（M0–M5 + ONIOM）。已在溶剂化酶体系上验证（DhlA，31,610 原子，`examples/enzyme_qmmm.py`）。
@@ -80,6 +82,13 @@ mixed = potential.createMixedSystem(topology, system, atoms=qm_atoms, embeddingC
 ```
 
 **这是近似**：截断以外的 QM–MM 静电被忽略（与 PME 不一致），残基进出截断球会让能量不连续，因此不保证严格的 NVE 能量守恒。`embeddingCutoff` 加上 QM 区尺寸必须小于最窄盒宽的一半（每步检查）。计时日志每步记录 `n_embed_groups` 与 `embed_changed`。
+
+`embeddingCutoff=None` 把盒内全部 MM 残基按相对 QM 区的最小镜像整体嵌入（全盒嵌入，`docs/plans/2026-10-17-b4-embedding-options.md` 的方案 S2）；忽略这一个镜像以外的周期镜像，残基在晶胞面附近换镜像时有小的不连续。在此基础上，`ewaldCorrection=True`（方案 S3，可选，默认关闭）把同一批 MM 电荷的“经典 Ewald 减全盒”势差补进 QM 区：在 QM 质心处展开到 2 阶，用 50 个赝点电荷表示；相应的 MM、QM 力用 ORCA `orca_vpot` 给出的赝电荷处 QM 静电势（每步约 0.1–0.2 s，另加 3.2 万个电荷时约 0.8 s 的经典计算）。QM 电荷仍不进入 OpenMM 的 PME，QM 自身镜像不计，所以 S3 仍不是 PME 一致的 QM/MM。依据见 `docs/validation/2026-11-07-c2-error-mechanism.md` 及设计稿 §11.6 列出的 S3 记录。
+
+```python
+mixed = potential.createMixedSystem(topology, system, atoms=qm_atoms, boundaryPairs=pairs,
+                                    embeddingCutoff=None, ewaldCorrection=True)
+```
 
 ONIOM（双层减法 QM:QM；这里水 0 用 HF/STO-3G，5 个水全部用 xTB——见 `examples/oniom_water_cluster.py`）：
 

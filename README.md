@@ -8,6 +8,8 @@ Changes per version: [CHANGELOG.md](CHANGELOG.md). Design spec: `openmm_orca_opi
 
 Follow-up fixes, validation and feature extensions: [TODO list](TODO.md) (Chinese; includes priorities, evidence and acceptance criteria).
 
+Latest progress (2026-11-07): [C2 matched single-point pilot](docs/validation/2026-11-07-c2-matched-pilot.md) (Chinese). Three geometries show relative S2 embedding deviations of −10.26/−16.09 kJ/mol from the aligned PySCF periodic-MM reference. Expansion is on hold; the 5 kJ/mol target is unchanged. Window statistics and TS validation remain open.
+
 Next stages and completion criteria: [project roadmap](docs/plans/2026-10-15-project-roadmap.md) (Chinese), covering version closure, cutoff sensitivity, a reaction-path benchmark and performance at matched accuracy.
 
 **Current status (v0.4.0):** full-QM, QM/MM (electronic embedding, covalent boundaries with H link atoms, periodic MM with approximate cutoff embedding) and two-layer ONIOM (QM:QM, non-periodic), plus restart and failure-bundle diagnostics, are working (M0–M5 + ONIOM). Validated on a solvated enzyme (DhlA, 31,610 atoms, `examples/enzyme_qmmm.py`).
@@ -81,6 +83,13 @@ mixed = potential.createMixedSystem(topology, system, atoms=qm_atoms, embeddingC
 ```
 
 **This is an approximation**: QM–MM electrostatics beyond the cutoff are neglected (not PME-consistent), and residues crossing the cutoff make the energy discontinuous, so strict NVE energy conservation is not expected. `embeddingCutoff` plus the QM region's extent must stay below half the narrowest box width (checked every step). The timing log records `n_embed_groups` and `embed_changed` per step.
+
+`embeddingCutoff=None` embeds every MM residue in the box at its minimum image relative to the QM region (whole-box embedding, scheme S2 of `docs/plans/2026-10-17-b4-embedding-options.md`); images beyond that one are neglected and residues switching image near the cell face cause small discontinuities. On top of it, `ewaldCorrection=True` (scheme S3, optional, off by default) adds the classical Ewald-minus-whole-box potential of the same MM charges in the QM region: its second-order Taylor expansion about the QM centre is represented by 50 pseudo point charges, and the matching MM and QM forces use the QM electrostatic potential at those charges from ORCA's `orca_vpot` (about 0.1–0.2 s per step, plus about 0.8 s of classical work for 32,000 charges). QM charges still do not enter OpenMM's PME and QM self images are absent, so S3 is still not PME-consistent QM/MM. Evidence: `docs/validation/2026-11-07-c2-error-mechanism.md` and the S3 records listed in spec §11.6.
+
+```python
+mixed = potential.createMixedSystem(topology, system, atoms=qm_atoms, boundaryPairs=pairs,
+                                    embeddingCutoff=None, ewaldCorrection=True)
+```
 
 ONIOM (two-layer subtractive QM:QM; here HF/STO-3G on water 0, xTB on all 5 waters — see `examples/oniom_water_cluster.py`):
 

@@ -8,6 +8,8 @@ OpenMM 主導の QM/MM：**OpenMM が MD を実行**し（力場・積分器・�
 
 その後の修正・検証・機能拡張は [TODO リスト](TODO.md)（中国語。優先度・証拠・受け入れ条件つき）を参照してください。
 
+最新の進捗（2026-11-07）：[C2 単点比較の初回結果](docs/validation/2026-11-07-c2-matched-pilot.md)（中国語）。3 構造の比較では、定義を揃えた PySCF 周期 MM 参照に対する相対埋め込み偏差は −10.26/−16.09 kJ/mol でした。計算規模の拡大を保留し、目標の 5 kJ/mol を維持します。ウィンドウ統計と TS 検証は未完了です。
+
 **現在の状態（v0.4.0）：** full-QM、QM/MM（静電埋め込み、H リンク原子による共有結合境界、周期 MM の近似カットオフ埋め込み）、2 層 ONIOM（QM:QM、非周期）に加え、restart と失敗バンドル診断が動作しています（M0–M5 + ONIOM）。溶媒和酵素系（DhlA、31,610 原子、`examples/enzyme_qmmm.py`）で検証済みです。
 
 ## インストール
@@ -81,6 +83,13 @@ mixed = potential.createMixedSystem(topology, system, atoms=qm_atoms, embeddingC
 ```
 
 **これは近似です**：カットオフ以遠の QM–MM 静電相互作用は無視され（PME と整合しません）、カットオフを跨ぐ残基はエネルギーを不連続にするため、厳密な NVE エネルギー保存は期待できません。`embeddingCutoff` と QM 領域の広がりの合計は、最も狭いボックス幅の半分未満でなければなりません（毎ステップチェック）。タイミングログは毎ステップ `n_embed_groups` と `embed_changed` を記録します。
+
+`embeddingCutoff=None` は、ボックス内のすべての MM 残基を QM 領域に対する最小イメージで丸ごと埋め込みます（全ボックス埋め込み、`docs/plans/2026-10-17-b4-embedding-options.md` のスキーム S2）。そのイメージ以外の周期イメージは無視され、セル面付近でイメージが切り替わる残基は小さな不連続を生じます。さらに `ewaldCorrection=True`（スキーム S3、オプション、既定はオフ）は、同じ MM 電荷による「古典 Ewald − 全ボックス」ポテンシャル差を QM 領域に加えます。QM 中心まわりの 2 次 Taylor 展開を 50 個の擬点電荷で表し、対応する MM・QM の力には ORCA の `orca_vpot` による擬電荷位置での QM 静電ポテンシャルを使います（1 ステップあたり約 0.1–0.2 s、加えて 3.2 万電荷で約 0.8 s の古典計算）。QM 電荷は依然として OpenMM の PME に入らず、QM 自身の周期イメージも含まれないため、S3 も PME と整合する QM/MM ではありません。根拠は `docs/validation/2026-11-07-c2-error-mechanism.md` と設計書 §11.6 に挙げた S3 の記録を参照してください。
+
+```python
+mixed = potential.createMixedSystem(topology, system, atoms=qm_atoms, boundaryPairs=pairs,
+                                    embeddingCutoff=None, ewaldCorrection=True)
+```
 
 ONIOM（2 層減算 QM:QM。ここでは水 0 に HF/STO-3G、5 水すべてに xTB——`examples/oniom_water_cluster.py` 参照）：
 
