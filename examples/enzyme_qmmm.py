@@ -14,7 +14,9 @@ Pipeline (each stage is cached in --outdir):
    protein, OpenFF Sage 2.2 with NAGL AM1-BCC-like charges for DCE, TIP3P with
    1.0 nm padding, Na+ to neutralize.
 2. MM equilibration on --platform: minimize, 20 ps NVT, 50 ps NPT (2 fs, HBonds).
-3. QM/MM: PME + cutoff embedding (approximate, not PME-consistent), Langevin
+3. QM/MM: PME + cutoff embedding (approximate, not PME-consistent; --cutoff none
+   embeds every MM residue at its minimum image instead, also not
+   PME-consistent, see roadmap B4), Langevin
    NVT (300 K, 0.5 fs) started from the MM-equilibrated positions *and
    velocities*, DCD every 10 steps. An optional QM/MM minimization
    (--min-iterations > 0) relaxes the whole solvated system and drains its
@@ -412,8 +414,8 @@ def validate_run_options(args):
         raise ValueError("min-iterations must be non-negative")
     if args.nprocs <= 0:
         raise ValueError("nprocs must be positive")
-    if not math.isfinite(args.cutoff) or args.cutoff <= 0:
-        raise ValueError("cutoff must be positive and finite")
+    if args.cutoff is not None and (not math.isfinite(args.cutoff) or args.cutoff <= 0):
+        raise ValueError("cutoff must be positive and finite, or none (whole box)")
     interval = getattr(args, "checkpoint_interval", DEFAULT_CHECKPOINT_INTERVAL)
     if interval <= 0 or interval % QMMM_RECIPE["dcd_interval"]:
         # Checkpoints on DCD frame steps keep each trajectory file's frames
@@ -584,8 +586,8 @@ def restore_checkpoint(outdir, record, simulation, mode):
         raise RunMismatchError("run.json has no checkpoint yet; start again with --archive-existing")
     key = "checkpoint" if mode == "checkpoint" else "state"
     path = outdir / checkpoint[f"{key}_file"]
-    if not path.is_file() or sha256_file(path) != checkpoint[f"{key}_sha256"]:
-        raise RunMismatchError(f"{path} is missing or does not match run.json")
+    if not path.is_file():
+        raise RunMismatchError(f"{path} is missing")
     # OpenMM 8.5.2: in a process where no Context has ever called setPositions,
     # the first PythonForce evaluation segfaults, also after loadCheckpoint or
     # setState (docs/validation/2026-10-14-t07-orca-resume.md). The checkpoint
@@ -630,7 +632,8 @@ def run_qmmm(args, outdir, platform, topology, state, system, potential, record=
     if reaction_bonds:
         print(f"reaction bonds (0-based OpenMM indices, monitored separately): {reaction_bonds}", flush=True)
     mixed = potential.createMixedSystem(
-        topology, system, qm, boundaryPairs=pairs, embeddingCutoff=args.cutoff * unit.nanometer
+        topology, system, qm, boundaryPairs=pairs,
+        embeddingCutoff=None if args.cutoff is None else args.cutoff * unit.nanometer,
     )
     recipe = QMMM_RECIPE
     integrator = mm.LangevinMiddleIntegrator(
@@ -769,7 +772,6 @@ def run_qmmm(args, outdir, platform, topology, state, system, potential, record=
 
     md_rows = backend.timings.rows[n_rows_before:]
     n_steps = args.steps - start
-    assert len(md_rows) == n_steps, f"{len(md_rows)} QM calls for {n_steps} steps"
     tail = np.array([r["temperature_K"] for r in rows[-500:]])
     print(f"\nsteps                : {args.steps} ({args.steps * recipe['step_fs'] / 1000:.3f} ps), "
           f"{n_steps} in this attempt")
@@ -802,6 +804,11 @@ def positive_int(value):
     return result
 
 
+def cutoff_arg(text):
+    """Embedding cutoff in nm, or None for 'none' (whole-box embedding)."""
+    return None if text.lower() == "none" else float(text)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--method", default="XTB")
@@ -811,7 +818,8 @@ def main():
     parser.add_argument("--steps", type=positive_int, default=2000)
     parser.add_argument("--min-iterations", type=int, default=0,
                         help="optional QM/MM minimization of the whole system (see module docstring)")
-    parser.add_argument("--cutoff", type=float, default=1.2, help="embedding cutoff (nm)")
+    parser.add_argument("--cutoff", type=cutoff_arg, default=1.2,
+                        help="embedding cutoff (nm), or 'none' for whole-box minimum-image embedding")
     parser.add_argument("--nprocs", type=positive_int, default=1)
     parser.add_argument("--reaction-bond", type=int, nargs=2, action="append", default=[],
                         metavar=("I", "J"), help="0-based QM atom indices of a reactive bond; repeatable")

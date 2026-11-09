@@ -1,0 +1,20 @@
+/home/ruigengji/miniforge3/envs/openmm_dev/lib/python3.12/site-packages/openff/interchange/smirnoff/_create.py:171: PresetChargesAndVirtualSitesWarning: Preset charges were provided (via `charge_from_molecules`) alongside a force field that includes virtual site parameters. Note that virtual sites will be applied charges from the force field and cannot be given preset charges. Virtual sites may also affect the charges of their orientation atoms, even if those atoms are given preset charges.
+  warnings.warn(
+QM region A: 14 atoms + 1 link H, method r2SCAN-3c 
+step     1  T  296.7 K  orca 7.68 s  wall 8.09 s/step  groups 9355  O–C1 0.333 nm  max stable bond dev 0.2%
+step    10  T  288.3 K  orca 6.48 s  wall 7.77 s/step  groups 9355  O–C1 0.333 nm  max stable bond dev 1.9%
+
+steps                : 10 (0.005 ps), 10 in this attempt
+wall time (attempt)  : 81 s
+  t_write  mean 0.090 s, p95 0.117 s
+  t_orca   mean 6.855 s, p95 7.830 s
+  t_read   mean 0.170 s, p95 0.400 s
+  t_total  mean 7.116 s, p95 8.346 s
+embedding groups     : 9355 mean, 8 steps with crossings
+n_fresh_retries      : 0
+T (last 10 steps)    : 290.1 ± 3.1 K
+max QM bond deviation: 1.9 %
+max stable bond dev  : 1.9 %
+max reaction bond dev: 0.0 %
+smoke checks          : PASS
+Task 22 acceptance   : NOT_EVALUATED

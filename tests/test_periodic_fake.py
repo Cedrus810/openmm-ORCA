@@ -239,3 +239,310 @@ def test_nonperiodic_unchanged():
     request = potential.backends[0].last_request
     assert request.n_mm == 3 and request.diagnostics == {}
     potential.close()
+
+
+# Whole-box minimum-image embedding (embeddingCutoff=None, roadmap B4 scheme S2).
+
+
+def total_energy(context, positions):
+    context.setPositions(positions * unit.nanometer)
+    return context.getState(getEnergy=True).getPotentialEnergy().value_in_unit(
+        unit.kilojoule_per_mole
+    )
+
+
+def test_full_box_embeds_all_mm_charges():
+    topology, system, positions = water_box()
+    potential = fake_potential(QM_WATER_FAKE_CHARGES)
+    mixed = potential.createMixedSystem(topology, system, [0, 1, 2], embeddingCutoff=None)
+    context = make_context(mixed, positions)
+    context.getState(getEnergy=True)
+    request = potential.backends[0].last_request
+    n_waters = topology.getNumResidues()
+    assert request.n_mm == 3 * (n_waters - 1)
+    assert request.mm_charges_e.sum() == pytest.approx(0.0, abs=1e-9)
+    diagnostics = request.diagnostics
+    assert diagnostics["n_embed_groups"] == n_waters - 1
+    assert diagnostics["embed_changed"] == n_waters - 1  # first step: all enter
+    # Every embedded atom sits within half a cell of the QM anchor, per axis.
+    rel = request.mm_positions_nm - request.qm_positions_nm[0]
+    assert np.all(np.abs(rel) < 0.5 * 2.5 + 0.2)  # + group extent around the face
+    potential.close()
+
+
+def test_full_box_finite_difference():
+    topology, system, positions = water_box()
+    potential = fake_potential(QM_WATER_FAKE_CHARGES)
+    mixed = potential.createMixedSystem(topology, system, [0, 1, 2], embeddingCutoff=None)
+    context = make_context(mixed, positions)
+    context.getState(getEnergy=True)  # fixes the FakeBackend r0
+    backend = potential.backends[0]
+    moved = positions.copy()
+    moved[0] += np.array([0.004, -0.003, 0.002])  # distort the QM water
+    context.setPositions(moved * unit.nanometer)
+    forces = context.getState(getForces=True).getForces(asNumpy=True).value_in_unit(
+        unit.kilojoule_per_mole / unit.nanometer
+    )
+    mm_o = 3 * 7  # an MM water oxygen
+    h = 1e-5
+    for atom in (0, mm_o):
+        for axis in range(3):
+            energies = []
+            for sign in (1, -1):
+                trial = moved.copy()
+                trial[atom, axis] += sign * h
+                energies.append(total_energy(context, trial))
+                # No group may switch image between the displaced evaluations.
+                assert backend.last_request.diagnostics["embed_changed"] == 0
+            fd = (energies[0] - energies[1]) / (2 * h)
+            assert abs(fd + forces[atom, axis]) < 1e-2, (atom, axis, fd, -forces[atom, axis])
+    potential.close()
+
+
+def test_full_box_lattice_invariance():
+    topology, system, positions = water_box()
+    box = box_of(system)
+    potential = fake_potential(QM_WATER_FAKE_CHARGES)
+    mixed = potential.createMixedSystem(topology, system, [0, 1, 2], embeddingCutoff=None)
+    context = make_context(mixed, positions)
+    e0 = total_energy(context, positions)  # also fixes the FakeBackend r0
+    backend = potential.backends[0]
+    shifted = positions + box[0] - box[1]  # whole system by a lattice vector
+    wrapped = positions.copy()
+    wrapped[1] += box[2]  # one QM H on its own
+    wrapped[30:33] -= box[0]  # one MM water on its own
+    for trial in (shifted, wrapped):
+        assert total_energy(context, trial) == pytest.approx(e0, abs=1e-6)
+        assert backend.last_request.diagnostics["embed_changed"] == 0
+    potential.close()
+
+
+def test_full_box_image_switch():
+    """A water crossing the face of the anchor-centred cell switches image.
+
+    The group stays embedded (total charge unchanged) and is counted in
+    embed_changed; its placement jumps by one lattice vector.
+    """
+    topology, system, positions = water_box()
+    box = box_of(system)
+    potential = fake_potential(QM_WATER_FAKE_CHARGES)
+    mixed = potential.createMixedSystem(topology, system, [0, 1, 2], embeddingCutoff=None)
+    context = make_context(mixed, positions)
+    backend = potential.backends[0]
+    from openmmorca.qmmm.imaging import minimum_image
+
+    # Put MM water 5 rigidly just inside the +x face relative to the QM O.
+    water = slice(15, 18)
+    rel = minimum_image(positions[water] - positions[0], box)
+    trial = positions.copy()
+    trial[water] = positions[0] + rel - rel[0] + np.array([1.20, 0.0, 0.0])
+    # Keep every atom inside the face (half width 1.25 nm) so the right image is unambiguous.
+    trial[water, 0] -= max(0.0, np.max(trial[water, 0] - positions[0, 0]) - 1.22)
+    total_energy(context, trial)
+    before = backend.last_request
+    n_mm = before.n_mm
+    trial2 = trial.copy()
+    trial2[water] += np.array([0.12, 0.0, 0.0])  # O now beyond the face: nearest via the left image
+    total_energy(context, trial2)
+    after = backend.last_request
+    assert after.n_mm == n_mm
+    assert after.diagnostics["embed_changed"] == 1
+    np.testing.assert_allclose(after.mm_charges_e.sum(), before.mm_charges_e.sum(), atol=1e-12)
+    (rows,) = np.nonzero(
+        np.linalg.norm(
+            minimum_image(after.mm_positions_nm - trial2[15], box), axis=1
+        ) < 1e-9
+    )
+    assert after.mm_positions_nm[rows[0], 0] - after.qm_positions_nm[0, 0] < 0  # left image now
+    potential.close()
+
+
+# ------------------------------------------------------------------
+# S3: whole-box embedding + classical Ewald correction (V3 plan Task 3)
+# ------------------------------------------------------------------
+
+
+def s3_water_box(charges=QM_WATER_FAKE_CHARGES):
+    topology, system, positions = water_box()
+    potential = fake_potential(charges)
+    mixed = potential.createMixedSystem(
+        topology, system, [0, 1, 2], embeddingCutoff=None, ewaldCorrection=True, forceGroup=1
+    )
+    return potential, mixed, positions
+
+
+def test_s3_requires_whole_box():
+    topology, system, positions = water_box()
+    potential = fake_potential(QM_WATER_FAKE_CHARGES)
+    with pytest.raises(ValueError, match="embeddingCutoff=None"):
+        potential.createMixedSystem(
+            topology, system, [0, 1, 2], embeddingCutoff=1.0 * unit.nanometer, ewaldCorrection=True
+        )
+    import helpers
+
+    top = helpers.water_topology(2)
+    with pytest.raises(ValueError, match="periodic"):
+        potential.createMixedSystem(
+            top, helpers.flexible_tip3p_system(top), [0, 1, 2], embeddingCutoff=None, ewaldCorrection=True
+        )
+
+
+def test_s3_request_contents():
+    potential, mixed, positions = s3_water_box()
+    context = make_context(mixed, positions)
+    context.getState(getEnergy=True)
+    request = potential.backends[0].last_request
+    n_real = 3 * (len(positions) // 3 - 1)
+    assert request.n_mm == n_real + 50
+    np.testing.assert_allclose(request.esp_points_nm, request.mm_positions_nm[n_real:])
+    assert request.diagnostics["s3_q_absmax"] > 0
+    assert request.diagnostics["s3_qm_extent_nm"] < 0.1  # one water
+    assert request.diagnostics["t_ewald"] > 0
+    potential.close()
+
+
+def test_s3_off_by_default():
+    topology, system, positions = water_box()
+    potential = fake_potential(QM_WATER_FAKE_CHARGES)
+    mixed = potential.createMixedSystem(topology, system, [0, 1, 2], embeddingCutoff=None)
+    make_context(mixed, positions).getState(getEnergy=True)
+    request = potential.backends[0].last_request
+    assert request.esp_points_nm is None
+    assert request.n_mm == 3 * (len(positions) // 3 - 1)
+    assert "t_ewald" not in request.diagnostics
+    potential.close()
+
+
+def test_s3_energy_matches_classical_ewald():
+    """E_S3 - E_S2 for the fake QM charges = sum_a q_a dV(R_a), dV = Ewald - whole-box (independent sum).
+
+    Residual budget: the pseudo charges reproduce the 2nd-order polynomial to ~0.1 kJ/mol/e RMS in
+    the template ball (Task 0 §1), and the Taylor truncation over a 0.1 nm water is far smaller;
+    with sum |q_a| = 1.4 e this gives the 0.1 kJ/mol tolerance. A net fake QM charge makes the
+    correction sizeable (a neutral QM water gives only ~0.4 kJ/mol here).
+    """
+    from test_ewald_correction import reference_dV
+
+    charges = [-1.0, 0.2, 0.2]
+    potential, mixed, positions = s3_water_box(charges)
+    context = make_context(mixed, positions)
+    e_s3 = context.getState(getEnergy=True, groups={1}).getPotentialEnergy().value_in_unit(
+        unit.kilojoule_per_mole
+    )
+    request = potential.backends[0].last_request
+    n_real = request.n_mm - 50
+    fake = FakeBackend(np.array(charges))
+    from openmmorca.backend.base import QMRequest
+
+    e_s2 = fake.evaluate(
+        QMRequest(qm_elements=request.qm_elements, qm_positions_nm=request.qm_positions_nm,
+                  mm_positions_nm=request.mm_positions_nm[:n_real],
+                  mm_charges_e=request.mm_charges_e[:n_real])
+    ).energy_kj_mol
+    dV = reference_dV(request.qm_positions_nm, request.mm_positions_nm[:n_real],
+                      request.mm_charges_e[:n_real], box_of(mixed))
+    expected = float(np.dot(charges, dV))
+    assert abs(expected) > 1.0  # the correction is not trivially small here
+    assert (e_s3 - e_s2) == pytest.approx(expected, abs=0.1)
+    potential.close()
+
+
+def test_s3_finite_difference_with_link():
+    """QM, link Q1/M1/M2, a near and the farthest MM atom: forces = -dE/dx (fake QM, S3 on)."""
+    topology, system, positions = solvated_dipeptide()
+    qm = [atom_index(topology, "ALA", n) for n in ("CB", "HB1", "HB2", "HB3")]
+    cb, ca = atom_index(topology, "ALA", "CB"), atom_index(topology, "ALA", "CA")
+    n_atom = atom_index(topology, "ALA", "N")
+    potential = fake_potential([-0.3, 0.1, 0.1, 0.1, 0.05])
+    mixed = potential.createMixedSystem(
+        topology, system, qm, boundaryPairs=[(cb, ca)], embeddingCutoff=None, ewaldCorrection=True
+    )
+    context = make_context(mixed, positions)
+    context.getState(getEnergy=True)  # fixes the FakeBackend r0
+    backend = potential.backends[0]
+    moved = positions.copy()
+    moved[qm[1]] += np.array([0.003, -0.002, 0.002])
+    context.setPositions(moved * unit.nanometer)
+    forces = context.getState(getForces=True).getForces(asNumpy=True).value_in_unit(
+        unit.kilojoule_per_mole / unit.nanometer
+    )
+    from openmmorca.qmmm.imaging import minimum_image
+
+    rel = np.linalg.norm(minimum_image(moved - moved[cb], box_of(mixed)), axis=1)
+    waters = [r for r in topology.residues() if r.name == "HOH"]
+    oxygens = [next(a.index for a in r.atoms() if a.name == "O") for r in waters]
+    near_o = min(oxygens, key=lambda i: rel[i])
+    far_o = max(oxygens, key=lambda i: rel[i])
+    h = 1e-5
+    for atom in (cb, qm[1], ca, n_atom, near_o, far_o):
+        for axis in range(3):
+            energies = []
+            for sign in (1, -1):
+                trial = moved.copy()
+                trial[atom, axis] += sign * h
+                energies.append(total_energy(context, trial))
+                assert backend.last_request.diagnostics["embed_changed"] == 0
+            fd = (energies[0] - energies[1]) / (2 * h)
+            assert abs(fd + forces[atom, axis]) < 1e-2, (atom, axis, fd, -forces[atom, axis])
+    potential.close()
+
+
+def test_s3_momentum_and_lattice_invariance():
+    potential, mixed, positions = s3_water_box()
+    box = box_of(mixed)
+    context = make_context(mixed, positions)
+    e0 = total_energy(context, positions)
+    f = context.getState(getForces=True, groups={1}).getForces(asNumpy=True).value_in_unit(
+        unit.kilojoule_per_mole / unit.nanometer
+    )
+    assert np.linalg.norm(f.sum(axis=0)) < 1e-6 * np.abs(f).max()
+    backend = potential.backends[0]
+    shifted = positions + box[0] - box[1]
+    wrapped = positions.copy()
+    wrapped[30:33] -= box[0]
+    for trial in (shifted, wrapped):
+        assert total_energy(context, trial) == pytest.approx(e0, abs=1e-6)
+        assert backend.last_request.diagnostics["embed_changed"] == 0
+    potential.close()
+
+
+def _image_switch_jump(ewald_correction):
+    """Energy change across the point where MM water 5 switches image (both sides 1e-6 nm apart)."""
+    topology, system, positions = water_box()
+    box = box_of(system)
+    potential = fake_potential(QM_WATER_FAKE_CHARGES)
+    mixed = potential.createMixedSystem(
+        topology, system, [0, 1, 2], embeddingCutoff=None, ewaldCorrection=ewald_correction
+    )
+    context = make_context(mixed, positions)
+    backend = potential.backends[0]
+    from openmmorca.qmmm.imaging import minimum_image
+
+    water = slice(15, 18)
+    rel = minimum_image(positions[water] - positions[0], box)
+    base = positions.copy()
+    base[water] = positions[0] + rel - rel[0] + np.array([1.20, 0.0, 0.0])
+    base[water, 0] -= max(0.0, np.max(base[water, 0] - positions[0, 0]) - 1.22)
+
+    def switched(s):
+        total_energy(context, base)
+        trial = base.copy()
+        trial[water] += np.array([s, 0.0, 0.0])
+        e = total_energy(context, trial)
+        return backend.last_request.diagnostics["embed_changed"] == 1, e
+
+    lo, hi = 0.0, 0.12
+    assert not switched(lo)[0] and switched(hi)[0]
+    for _ in range(40):
+        mid = 0.5 * (lo + hi)
+        lo, hi = (lo, mid) if switched(mid)[0] else (mid, hi)
+    jump = switched(hi)[1] - switched(lo)[1]
+    potential.close()
+    return jump, hi - lo
+
+
+def test_s3_image_switch_is_smaller_than_s2():
+    jump_s2, width = _image_switch_jump(False)
+    jump_s3, _ = _image_switch_jump(True)
+    assert width < 1e-9
+    assert abs(jump_s3) < abs(jump_s2), (jump_s2, jump_s3)

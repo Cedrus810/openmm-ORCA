@@ -3,7 +3,7 @@
 > 文档性质：**设计规格**，回答"做什么、为什么这样做"。
 > 具体执行顺序、改哪些文件、每步怎么测，见实施计划 `docs/plans/2026-09-26-openmm-orca-implementation-plan.md`。
 > 原始讨论稿备份：`openmm_orca_opi_design_plan.md.orig`。
-> 最后更新：2026-09-27。
+> 最后更新：2026-09-27；2026-11-07 修改 §1.2（允许 S3 作为可选模式）；2026-11-09 新增 §11.6（S3）。
 
 ---
 
@@ -49,6 +49,7 @@
 
 - 不再造一个 ASE，也不经 ASE 中转。
 - 不做严格的周期性 QM/MM 静电（PME 与 QM 耦合、Ewald 嵌入）。
+  - 例外（用户 2026-11-07 对"你同意把设计稿 §1.2 和 C1 §8 改成允许 S3 作为可选模式吗？"答"可"）：允许 S3 作为**可选模式**，即在 S2 全盒嵌入上把同一批 MM 电荷的经典 Ewald 修正势（`V_Ewald − V_S2`，不含 QM 自身周期镜像）加进 QM 计算。QM 电荷仍不进入 OpenMM PME，默认嵌入不变。定义、实现方式与验证见 `docs/plans/2026-11-07-s3-ewald-correction-proposal.md`；进入 `openmmorca/` 的实现另行批准。
 - 不做自适应 QM 区、极化 MM、多时间步（MTS）、异步 QM。
 - 不自动识别化学边界：link atom 的边界原子对由用户显式给出。
 - 不支持一个后端实例服务多个 OpenMM Context。
@@ -671,6 +672,21 @@ M5 中回调需要盒向量：`PythonForce.setUsesPeriodicBoundaryConditions(Tru
 - `MonteCarloBarostat` 每次尝试额外触发 **2 次** PythonForce 调用，NPT 下 QM 开销增加 2/频率（默认 25 → +8%）。
 - 截断判据是"组内任一原子与任一 QM 原子"的最小镜像距离，因此要求 R_emb + D < 最短盒宽 / 2（D 为 QM 区尺寸），每步校验（NPT 下盒子会变）。
 - charge shift 是静态的：截断嵌入使用 shift 后的电荷，M1 不进入任何组。
+
+### 11.5 可选：全盒最小镜像嵌入（2026-10-28 实现）
+
+`createMixedSystem(..., embeddingCutoff=None)` 把盒内全部电荷组都放进嵌入。放置规则同 §11.1：整组放在组内离 QM 区最近的原子所在的镜像上，原子的镜像相对第一个 QM 原子取。此时嵌入总电荷每步都等于 MM 总电荷，不需要 §11.4 中 R_emb + D 的盒宽条件。被忽略的是这一个镜像以外的周期镜像；组在锚点所在晶胞的面附近会换镜像，造成小的不连续，这些事件计入 timings 的 `embed_changed`。它仍属截断嵌入，**不是** PME 一致的，所以 §1.2 的非目标不变。默认仍是 1.2 nm 截断。依据和验证见 `docs/plans/2026-10-17-b4-embedding-options.md` §6、§8。
+
+
+### 11.6 可选：S3，全盒嵌入加经典 Ewald 修正（2026-11-07 起，用户同意的 §1.2 例外）
+
+`createMixedSystem(..., embeddingCutoff=None, ewaldCorrection=True)`。在 §11.5 的全盒嵌入上，把同一批 MM 电荷的经典势差 `dV = V_Ewald − V_S2`（周期 Ewald 和含均匀背景、不含 QM 自身镜像，减去最小镜像点电荷的直接和）在 QM 区内补进 QM 计算：
+
+- 展开：在 QM 请求坐标（含 link H）的质心 r_c 处取 `dV` 的解析 Taylor 系数到 2 阶（10 个系数）。Ewald 默认 α = 1.2 nm⁻¹、kmax = 10，实空间对 −2…2 层镜像求和。
+- 表示：离 r_c 2.0 nm 的球面上 50 个赝电荷，Q = W c；W 在半径 0.6 nm 的模板球上用岭回归（λ = 1e-4）拟合一次。赝电荷追加到 `%pointcharges` 文件，后端读写不变。外部电荷只能产生调和势，二次项的迹（来自背景）只能近似。
+- 力：赝电荷处的 QM 静电势 φ（ORCA `orca_vpot qm.gbw qm.scfp`，即 ∂E/∂Q）给出 m = Wᵀφ = ∂E/∂c；MM 电荷另加 −m·∂c/∂p_j；∂E/∂r_c = Σ 赝电荷 pcgrad + Σ_j(上述 MM 附加力)，平均分到 QM 请求原子，再按 §10.3 回分 link H。backend 协议增加可选的 `esp_points_nm` / `esp_kj_mol_e`。
+- 范围：QM 电荷仍不进入 OpenMM PME，QM 自身周期镜像不计；仍**不是** PME 一致的 QM/MM。只允许 `embeddingCutoff=None`，默认关闭。timings 增加 `t_vpot`、`t_ewald`、`s3_q_absmax`、`s3_qm_extent_nm`。
+- 依据与验证：误差来源 `docs/validation/2026-11-07-c2-error-mechanism.md`；方案 `docs/plans/2026-11-07-s3-ewald-correction-proposal.md`；V1/V2/Task 0 记录；实施计划 `docs/plans/2026-11-07-s3-v3-implementation-plan.md`（"进度"一节）。首批 3 帧（方案 A，PySCF r2SCAN/def2-SVP）相对周期参考的嵌入误差由 S2 的 −10.26/−16.09 降到 +0.05/+0.06 kJ/mol；酶单帧 r2SCAN-3c 有限差分 12 个分量最大差 0.034 kJ/mol/nm。每步额外成本：经典部分约 0.8 s（181，8 线程，31,952 个电荷）、`orca_vpot` 约 0.1–0.2 s。
 
 ---
 

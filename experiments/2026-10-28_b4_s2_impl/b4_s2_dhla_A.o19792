@@ -1,0 +1,25 @@
+=== 2026-10-28 15:25:42  host yayoi29.cluster.local ===
+NVIDIA GeForce RTX 3090, 24576 MiB
+Loading orca/6.1.1
+  Loading requirement: gcc/13.3.0 openmpi/5.0.7_gcc13.3.0
+OPI_ORCA=/home/apps/orca_6_1_1_avx2  mpirun=/home/apps/openmpi/5.0.7_gcc13.3.0/bin/mpirun
+/home/ruigengji/miniforge3/envs/openmm_dev/lib/python3.12/site-packages/openff/interchange/smirnoff/_create.py:171: PresetChargesAndVirtualSitesWarning: Preset charges were provided (via `charge_from_molecules`) alongside a force field that includes virtual site parameters. Note that virtual sites will be applied charges from the force field and cannot be given preset charges. Virtual sites may also affect the charges of their orientation atoms, even if those atoms are given preset charges.
+  warnings.warn(
+Traceback (most recent call last):
+  File "/home/ruigengji/openmm-ORCA/examples/enzyme_qmmm.py", line 844, in <module>
+    main()
+  File "/home/ruigengji/openmm-ORCA/examples/enzyme_qmmm.py", line 840, in main
+    raise SystemExit(0 if run(args) else 1)
+                          ^^^^^^^^^
+  File "/home/ruigengji/openmm-ORCA/examples/enzyme_qmmm.py", line 481, in run
+    state = equilibrate(outdir, pdb, forcefield, platform)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ruigengji/openmm-ORCA/examples/enzyme_qmmm.py", line 330, in equilibrate
+    manifest = cache.load()
+               ^^^^^^^^^^^^
+  File "/home/ruigengji/openmm-ORCA/examples/enzyme_workflow.py", line 108, in load
+    self.reject("changed fields: " + ", ".join(different))
+  File "/home/ruigengji/openmm-ORCA/examples/enzyme_workflow.py", line 87, in reject
+    raise CacheMismatchError(
+enzyme_workflow.CacheMismatchError: cache mismatch for md_a_s2/equilibrated.xml: changed fields: identity.system_sha256. Use a new --outdir to rebuild; existing artifacts have been preserved
+=== done 2026-10-28 15:27:36 ===

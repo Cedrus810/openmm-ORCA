@@ -1,0 +1,227 @@
+=== 2026-10-28 15:54:45  host yayoi42.cluster.local ===
+NVIDIA GeForce RTX 4080, 16376 MiB
+Loading orca/6.1.1
+  Loading requirement: gcc/13.3.0 openmpi/5.0.7_gcc13.3.0
+OPI_ORCA=/home/apps/orca_6_1_1_avx2  mpirun=/home/apps/openmpi/5.0.7_gcc13.3.0/bin/mpirun
+start mode: --archive-existing
+archived previous run products to md_a_s2/archive/run-20261028T065520Z
+/home/ruigengji/miniforge3/envs/openmm_dev/lib/python3.12/site-packages/openff/interchange/smirnoff/_create.py:171: PresetChargesAndVirtualSitesWarning: Preset charges were provided (via `charge_from_molecules`) alongside a force field that includes virtual site parameters. Note that virtual sites will be applied charges from the force field and cannot be given preset charges. Virtual sites may also affect the charges of their orientation atoms, even if those atoms are given preset charges.
+  warnings.warn(
+/home/ruigengji/openmm-ORCA/openmmorca/backend/orca_opi.py:123: UserWarning: nprocs=12 exceeds the estimated number of physical cores (10); running beyond physical cores typically slows ORCA down
+  warnings.warn(
+QM region A: 14 atoms + 1 link H, method r2SCAN-3c 
+step     1  T  296.7 K  orca 5.96 s  wall 23.12 s/step  groups 9355  O–C1 0.333 nm  max stable bond dev 0.2%
+step    10  T  288.0 K  orca 7.00 s  wall 8.68 s/step  groups 9355  O–C1 0.333 nm  max stable bond dev 2.0%
+step    20  T  295.1 K  orca 6.98 s  wall 7.91 s/step  groups 9355  O–C1 0.330 nm  max stable bond dev 4.1%
+step    30  T  299.4 K  orca 6.73 s  wall 7.68 s/step  groups 9355  O–C1 0.326 nm  max stable bond dev 6.0%
+step    40  T  302.5 K  orca 7.04 s  wall 7.51 s/step  groups 9355  O–C1 0.324 nm  max stable bond dev 7.5%
+step    50  T  299.2 K  orca 6.94 s  wall 7.43 s/step  groups 9355  O–C1 0.324 nm  max stable bond dev 7.9%
+step    60  T  300.9 K  orca 6.83 s  wall 7.36 s/step  groups 9355  O–C1 0.323 nm  max stable bond dev 8.0%
+step    70  T  300.6 K  orca 7.13 s  wall 7.33 s/step  groups 9355  O–C1 0.321 nm  max stable bond dev 8.0%
+step    80  T  299.0 K  orca 7.03 s  wall 7.30 s/step  groups 9355  O–C1 0.319 nm  max stable bond dev 8.0%
+step    90  T  298.6 K  orca 7.01 s  wall 7.29 s/step  groups 9355  O–C1 0.318 nm  max stable bond dev 8.0%
+step   100  T  298.7 K  orca 6.71 s  wall 7.28 s/step  groups 9355  O–C1 0.315 nm  max stable bond dev 8.0%
+step   110  T  298.9 K  orca 6.95 s  wall 7.27 s/step  groups 9355  O–C1 0.310 nm  max stable bond dev 8.0%
+step   120  T  298.4 K  orca 7.11 s  wall 7.28 s/step  groups 9355  O–C1 0.304 nm  max stable bond dev 8.0%
+step   130  T  298.3 K  orca 7.22 s  wall 7.28 s/step  groups 9355  O–C1 0.300 nm  max stable bond dev 8.0%
+step   140  T  299.0 K  orca 7.16 s  wall 7.28 s/step  groups 9355  O–C1 0.297 nm  max stable bond dev 8.0%
+step   150  T  298.7 K  orca 7.34 s  wall 7.28 s/step  groups 9355  O–C1 0.294 nm  max stable bond dev 8.0%
+step   160  T  298.8 K  orca 7.34 s  wall 7.28 s/step  groups 9355  O–C1 0.290 nm  max stable bond dev 8.0%
+step   170  T  300.6 K  orca 7.55 s  wall 7.29 s/step  groups 9355  O–C1 0.286 nm  max stable bond dev 9.1%
+step   180  T  301.7 K  orca 7.27 s  wall 7.29 s/step  groups 9355  O–C1 0.284 nm  max stable bond dev 9.7%
+step   190  T  298.7 K  orca 7.15 s  wall 7.30 s/step  groups 9355  O–C1 0.285 nm  max stable bond dev 9.7%
+step   200  T  299.3 K  orca 7.15 s  wall 7.30 s/step  groups 9355  O–C1 0.287 nm  max stable bond dev 9.7%
+step   210  T  298.9 K  orca 6.86 s  wall 7.30 s/step  groups 9355  O–C1 0.288 nm  max stable bond dev 9.7%
+step   220  T  299.5 K  orca 7.53 s  wall 7.31 s/step  groups 9355  O–C1 0.291 nm  max stable bond dev 9.7%
+step   230  T  298.9 K  orca 6.91 s  wall 7.31 s/step  groups 9355  O–C1 0.295 nm  max stable bond dev 9.7%
+step   240  T  299.7 K  orca 7.13 s  wall 7.31 s/step  groups 9355  O–C1 0.299 nm  max stable bond dev 9.7%
+step   250  T  301.7 K  orca 7.26 s  wall 7.31 s/step  groups 9355  O–C1 0.299 nm  max stable bond dev 9.7%
+step   260  T  299.4 K  orca 7.24 s  wall 7.32 s/step  groups 9355  O–C1 0.296 nm  max stable bond dev 9.7%
+step   270  T  298.9 K  orca 7.23 s  wall 7.32 s/step  groups 9355  O–C1 0.292 nm  max stable bond dev 9.7%
+step   280  T  299.5 K  orca 7.34 s  wall 7.32 s/step  groups 9355  O–C1 0.289 nm  max stable bond dev 9.7%
+step   290  T  301.3 K  orca 7.39 s  wall 7.33 s/step  groups 9355  O–C1 0.286 nm  max stable bond dev 9.7%
+step   300  T  301.1 K  orca 7.20 s  wall 7.33 s/step  groups 9355  O–C1 0.283 nm  max stable bond dev 9.7%
+step   310  T  300.3 K  orca 7.42 s  wall 7.34 s/step  groups 9355  O–C1 0.279 nm  max stable bond dev 9.7%
+step   320  T  300.1 K  orca 7.32 s  wall 7.35 s/step  groups 9355  O–C1 0.275 nm  max stable bond dev 9.7%
+step   330  T  300.9 K  orca 7.45 s  wall 7.35 s/step  groups 9355  O–C1 0.274 nm  max stable bond dev 9.7%
+step   340  T  300.1 K  orca 6.76 s  wall 7.36 s/step  groups 9355  O–C1 0.274 nm  max stable bond dev 9.7%
+step   350  T  299.3 K  orca 7.02 s  wall 7.36 s/step  groups 9355  O–C1 0.275 nm  max stable bond dev 9.7%
+step   360  T  299.6 K  orca 7.30 s  wall 7.37 s/step  groups 9355  O–C1 0.273 nm  max stable bond dev 9.7%
+step   370  T  301.1 K  orca 7.45 s  wall 7.37 s/step  groups 9355  O–C1 0.270 nm  max stable bond dev 9.7%
+step   380  T  299.4 K  orca 7.41 s  wall 7.38 s/step  groups 9355  O–C1 0.267 nm  max stable bond dev 9.7%
+step   390  T  298.7 K  orca 7.47 s  wall 7.39 s/step  groups 9355  O–C1 0.264 nm  max stable bond dev 9.7%
+step   400  T  299.6 K  orca 7.34 s  wall 7.40 s/step  groups 9355  O–C1 0.260 nm  max stable bond dev 9.7%
+step   410  T  299.2 K  orca 7.33 s  wall 7.40 s/step  groups 9355  O–C1 0.256 nm  max stable bond dev 9.7%
+step   420  T  299.1 K  orca 7.29 s  wall 7.41 s/step  groups 9355  O–C1 0.252 nm  max stable bond dev 9.7%
+step   430  T  298.9 K  orca 8.30 s  wall 7.41 s/step  groups 9355  O–C1 0.252 nm  max stable bond dev 9.7%
+step   440  T  298.3 K  orca 7.57 s  wall 7.42 s/step  groups 9355  O–C1 0.252 nm  max stable bond dev 9.7%
+step   450  T  298.6 K  orca 7.54 s  wall 7.42 s/step  groups 9355  O–C1 0.252 nm  max stable bond dev 9.7%
+step   460  T  299.4 K  orca 7.59 s  wall 7.43 s/step  groups 9355  O–C1 0.251 nm  max stable bond dev 9.7%
+step   470  T  299.0 K  orca 7.23 s  wall 7.45 s/step  groups 9355  O–C1 0.251 nm  max stable bond dev 9.7%
+step   480  T  299.0 K  orca 7.45 s  wall 7.45 s/step  groups 9355  O–C1 0.252 nm  max stable bond dev 9.7%
+step   490  T  299.6 K  orca 7.55 s  wall 7.46 s/step  groups 9355  O–C1 0.254 nm  max stable bond dev 9.7%
+step   500  T  300.3 K  orca 7.58 s  wall 7.47 s/step  groups 9355  O–C1 0.255 nm  max stable bond dev 9.7%
+step   510  T  301.2 K  orca 7.51 s  wall 7.47 s/step  groups 9355  O–C1 0.254 nm  max stable bond dev 9.7%
+step   520  T  299.9 K  orca 7.54 s  wall 7.48 s/step  groups 9355  O–C1 0.253 nm  max stable bond dev 9.7%
+step   530  T  300.3 K  orca 7.53 s  wall 7.48 s/step  groups 9355  O–C1 0.253 nm  max stable bond dev 9.7%
+step   540  T  299.3 K  orca 7.62 s  wall 7.49 s/step  groups 9355  O–C1 0.254 nm  max stable bond dev 9.7%
+step   550  T  298.7 K  orca 7.52 s  wall 7.49 s/step  groups 9355  O–C1 0.255 nm  max stable bond dev 9.7%
+step   560  T  300.5 K  orca 7.47 s  wall 7.49 s/step  groups 9355  O–C1 0.256 nm  max stable bond dev 9.7%
+step   570  T  300.2 K  orca 7.34 s  wall 7.50 s/step  groups 9355  O–C1 0.257 nm  max stable bond dev 9.7%
+step   580  T  300.6 K  orca 7.57 s  wall 7.50 s/step  groups 9355  O–C1 0.260 nm  max stable bond dev 9.7%
+step   590  T  298.8 K  orca 7.79 s  wall 7.50 s/step  groups 9355  O–C1 0.264 nm  max stable bond dev 9.7%
+step   600  T  298.1 K  orca 7.62 s  wall 7.50 s/step  groups 9355  O–C1 0.266 nm  max stable bond dev 9.7%
+step   610  T  297.6 K  orca 7.55 s  wall 7.51 s/step  groups 9355  O–C1 0.269 nm  max stable bond dev 9.7%
+step   620  T  298.0 K  orca 7.52 s  wall 7.51 s/step  groups 9355  O–C1 0.275 nm  max stable bond dev 9.7%
+step   630  T  300.8 K  orca 7.54 s  wall 7.52 s/step  groups 9355  O–C1 0.283 nm  max stable bond dev 9.7%
+step   640  T  299.8 K  orca 7.83 s  wall 7.52 s/step  groups 9355  O–C1 0.292 nm  max stable bond dev 9.7%
+step   650  T  300.5 K  orca 7.24 s  wall 7.52 s/step  groups 9355  O–C1 0.296 nm  max stable bond dev 9.7%
+step   660  T  299.6 K  orca 7.48 s  wall 7.52 s/step  groups 9355  O–C1 0.298 nm  max stable bond dev 9.7%
+step   670  T  299.7 K  orca 6.92 s  wall 7.52 s/step  groups 9355  O–C1 0.301 nm  max stable bond dev 9.7%
+step   680  T  299.5 K  orca 7.41 s  wall 7.52 s/step  groups 9355  O–C1 0.303 nm  max stable bond dev 9.7%
+step   690  T  299.3 K  orca 7.13 s  wall 7.52 s/step  groups 9355  O–C1 0.304 nm  max stable bond dev 9.7%
+step   700  T  301.0 K  orca 7.32 s  wall 7.53 s/step  groups 9355  O–C1 0.303 nm  max stable bond dev 9.7%
+step   710  T  300.0 K  orca 7.67 s  wall 7.53 s/step  groups 9355  O–C1 0.301 nm  max stable bond dev 9.7%
+step   720  T  300.0 K  orca 8.17 s  wall 7.53 s/step  groups 9355  O–C1 0.300 nm  max stable bond dev 9.7%
+step   730  T  297.3 K  orca 7.35 s  wall 7.53 s/step  groups 9355  O–C1 0.299 nm  max stable bond dev 9.7%
+step   740  T  299.0 K  orca 7.59 s  wall 7.54 s/step  groups 9355  O–C1 0.298 nm  max stable bond dev 9.7%
+step   750  T  300.2 K  orca 7.49 s  wall 7.54 s/step  groups 9355  O–C1 0.296 nm  max stable bond dev 9.7%
+step   760  T  301.0 K  orca 7.52 s  wall 7.54 s/step  groups 9355  O–C1 0.294 nm  max stable bond dev 9.7%
+step   770  T  300.4 K  orca 7.50 s  wall 7.54 s/step  groups 9355  O–C1 0.292 nm  max stable bond dev 9.7%
+step   780  T  301.1 K  orca 7.50 s  wall 7.54 s/step  groups 9355  O–C1 0.290 nm  max stable bond dev 9.7%
+step   790  T  300.1 K  orca 7.40 s  wall 7.55 s/step  groups 9355  O–C1 0.287 nm  max stable bond dev 9.7%
+step   800  T  299.1 K  orca 7.58 s  wall 7.55 s/step  groups 9355  O–C1 0.284 nm  max stable bond dev 9.7%
+step   810  T  298.6 K  orca 8.01 s  wall 7.55 s/step  groups 9355  O–C1 0.280 nm  max stable bond dev 9.7%
+step   820  T  300.0 K  orca 7.80 s  wall 7.56 s/step  groups 9355  O–C1 0.277 nm  max stable bond dev 9.7%
+step   830  T  300.7 K  orca 7.72 s  wall 7.56 s/step  groups 9355  O–C1 0.276 nm  max stable bond dev 9.7%
+step   840  T  302.2 K  orca 7.54 s  wall 7.57 s/step  groups 9355  O–C1 0.276 nm  max stable bond dev 9.7%
+step   850  T  300.5 K  orca 7.97 s  wall 7.57 s/step  groups 9355  O–C1 0.276 nm  max stable bond dev 9.7%
+step   860  T  300.0 K  orca 7.85 s  wall 7.58 s/step  groups 9355  O–C1 0.274 nm  max stable bond dev 9.7%
+step   870  T  299.2 K  orca 7.66 s  wall 7.58 s/step  groups 9355  O–C1 0.273 nm  max stable bond dev 9.7%
+step   880  T  298.1 K  orca 7.74 s  wall 7.58 s/step  groups 9355  O–C1 0.273 nm  max stable bond dev 9.7%
+step   890  T  297.8 K  orca 7.59 s  wall 7.58 s/step  groups 9355  O–C1 0.275 nm  max stable bond dev 9.7%
+step   900  T  301.0 K  orca 7.59 s  wall 7.59 s/step  groups 9355  O–C1 0.278 nm  max stable bond dev 9.7%
+step   910  T  301.5 K  orca 7.40 s  wall 7.59 s/step  groups 9355  O–C1 0.281 nm  max stable bond dev 9.7%
+step   920  T  301.3 K  orca 7.75 s  wall 7.59 s/step  groups 9355  O–C1 0.283 nm  max stable bond dev 9.7%
+step   930  T  300.7 K  orca 7.49 s  wall 7.59 s/step  groups 9355  O–C1 0.284 nm  max stable bond dev 9.7%
+step   940  T  301.0 K  orca 8.46 s  wall 7.60 s/step  groups 9355  O–C1 0.283 nm  max stable bond dev 9.7%
+step   950  T  300.9 K  orca 8.10 s  wall 7.60 s/step  groups 9355  O–C1 0.281 nm  max stable bond dev 9.7%
+step   960  T  301.6 K  orca 7.63 s  wall 7.60 s/step  groups 9355  O–C1 0.277 nm  max stable bond dev 9.7%
+step   970  T  301.6 K  orca 7.46 s  wall 7.61 s/step  groups 9355  O–C1 0.275 nm  max stable bond dev 9.7%
+step   980  T  301.3 K  orca 7.60 s  wall 7.61 s/step  groups 9355  O–C1 0.274 nm  max stable bond dev 9.7%
+step   990  T  299.4 K  orca 7.43 s  wall 7.61 s/step  groups 9355  O–C1 0.275 nm  max stable bond dev 9.7%
+step  1000  T  301.0 K  orca 7.40 s  wall 7.61 s/step  groups 9355  O–C1 0.275 nm  max stable bond dev 9.7%
+step  1010  T  301.9 K  orca 7.47 s  wall 7.61 s/step  groups 9355  O–C1 0.273 nm  max stable bond dev 9.7%
+step  1020  T  301.7 K  orca 7.87 s  wall 7.61 s/step  groups 9355  O–C1 0.272 nm  max stable bond dev 9.7%
+step  1030  T  300.5 K  orca 7.48 s  wall 7.61 s/step  groups 9355  O–C1 0.271 nm  max stable bond dev 9.9%
+step  1040  T  299.7 K  orca 7.94 s  wall 7.61 s/step  groups 9355  O–C1 0.273 nm  max stable bond dev 9.9%
+step  1050  T  299.5 K  orca 7.53 s  wall 7.62 s/step  groups 9355  O–C1 0.273 nm  max stable bond dev 9.9%
+step  1060  T  300.0 K  orca 7.79 s  wall 7.62 s/step  groups 9355  O–C1 0.274 nm  max stable bond dev 9.9%
+step  1070  T  300.3 K  orca 7.91 s  wall 7.63 s/step  groups 9355  O–C1 0.275 nm  max stable bond dev 9.9%
+step  1080  T  299.6 K  orca 7.80 s  wall 7.63 s/step  groups 9355  O–C1 0.278 nm  max stable bond dev 9.9%
+step  1090  T  299.4 K  orca 7.91 s  wall 7.63 s/step  groups 9355  O–C1 0.279 nm  max stable bond dev 9.9%
+step  1100  T  300.0 K  orca 7.71 s  wall 7.63 s/step  groups 9355  O–C1 0.281 nm  max stable bond dev 9.9%
+step  1110  T  300.4 K  orca 7.70 s  wall 7.63 s/step  groups 9355  O–C1 0.282 nm  max stable bond dev 10.2%
+step  1120  T  298.8 K  orca 7.49 s  wall 7.63 s/step  groups 9355  O–C1 0.285 nm  max stable bond dev 10.2%
+step  1130  T  299.0 K  orca 7.46 s  wall 7.63 s/step  groups 9355  O–C1 0.288 nm  max stable bond dev 10.8%
+step  1140  T  299.2 K  orca 7.59 s  wall 7.63 s/step  groups 9355  O–C1 0.291 nm  max stable bond dev 10.8%
+step  1150  T  299.5 K  orca 7.77 s  wall 7.63 s/step  groups 9355  O–C1 0.291 nm  max stable bond dev 10.8%
+step  1160  T  299.2 K  orca 7.54 s  wall 7.63 s/step  groups 9355  O–C1 0.289 nm  max stable bond dev 11.2%
+step  1170  T  300.3 K  orca 7.53 s  wall 7.63 s/step  groups 9355  O–C1 0.286 nm  max stable bond dev 11.2%
+step  1180  T  300.3 K  orca 7.74 s  wall 7.63 s/step  groups 9355  O–C1 0.285 nm  max stable bond dev 11.2%
+step  1190  T  298.5 K  orca 7.29 s  wall 7.63 s/step  groups 9355  O–C1 0.285 nm  max stable bond dev 11.2%
+step  1200  T  298.2 K  orca 7.67 s  wall 7.63 s/step  groups 9355  O–C1 0.285 nm  max stable bond dev 11.2%
+step  1210  T  297.9 K  orca 7.66 s  wall 7.64 s/step  groups 9355  O–C1 0.285 nm  max stable bond dev 11.2%
+step  1220  T  297.6 K  orca 7.86 s  wall 7.64 s/step  groups 9355  O–C1 0.287 nm  max stable bond dev 11.2%
+step  1230  T  299.0 K  orca 7.54 s  wall 7.64 s/step  groups 9355  O–C1 0.289 nm  max stable bond dev 11.2%
+step  1240  T  298.3 K  orca 7.58 s  wall 7.64 s/step  groups 9355  O–C1 0.290 nm  max stable bond dev 11.2%
+step  1250  T  300.3 K  orca 7.31 s  wall 7.64 s/step  groups 9355  O–C1 0.289 nm  max stable bond dev 11.2%
+step  1260  T  300.3 K  orca 7.49 s  wall 7.64 s/step  groups 9355  O–C1 0.289 nm  max stable bond dev 11.2%
+step  1270  T  300.2 K  orca 7.30 s  wall 7.64 s/step  groups 9355  O–C1 0.293 nm  max stable bond dev 11.2%
+step  1280  T  298.8 K  orca 7.38 s  wall 7.64 s/step  groups 9355  O–C1 0.297 nm  max stable bond dev 11.2%
+step  1290  T  298.3 K  orca 7.31 s  wall 7.64 s/step  groups 9355  O–C1 0.298 nm  max stable bond dev 11.2%
+step  1300  T  298.3 K  orca 7.33 s  wall 7.63 s/step  groups 9355  O–C1 0.294 nm  max stable bond dev 11.2%
+step  1310  T  298.3 K  orca 7.16 s  wall 7.63 s/step  groups 9355  O–C1 0.290 nm  max stable bond dev 11.2%
+step  1320  T  297.2 K  orca 7.47 s  wall 7.63 s/step  groups 9355  O–C1 0.287 nm  max stable bond dev 11.2%
+step  1330  T  298.8 K  orca 7.37 s  wall 7.63 s/step  groups 9355  O–C1 0.286 nm  max stable bond dev 11.2%
+step  1340  T  299.6 K  orca 7.89 s  wall 7.64 s/step  groups 9355  O–C1 0.285 nm  max stable bond dev 11.2%
+step  1350  T  300.0 K  orca 7.48 s  wall 7.64 s/step  groups 9355  O–C1 0.284 nm  max stable bond dev 11.2%
+step  1360  T  299.3 K  orca 7.43 s  wall 7.64 s/step  groups 9355  O–C1 0.286 nm  max stable bond dev 11.2%
+step  1370  T  299.8 K  orca 7.53 s  wall 7.64 s/step  groups 9355  O–C1 0.288 nm  max stable bond dev 11.2%
+step  1380  T  300.2 K  orca 7.35 s  wall 7.64 s/step  groups 9355  O–C1 0.290 nm  max stable bond dev 11.2%
+step  1390  T  301.2 K  orca 7.44 s  wall 7.64 s/step  groups 9355  O–C1 0.288 nm  max stable bond dev 11.2%
+step  1400  T  301.9 K  orca 7.38 s  wall 7.64 s/step  groups 9355  O–C1 0.285 nm  max stable bond dev 11.2%
+step  1410  T  300.8 K  orca 7.64 s  wall 7.64 s/step  groups 9355  O–C1 0.280 nm  max stable bond dev 11.2%
+step  1420  T  300.7 K  orca 7.42 s  wall 7.64 s/step  groups 9355  O–C1 0.277 nm  max stable bond dev 11.2%
+step  1430  T  300.8 K  orca 8.41 s  wall 7.64 s/step  groups 9355  O–C1 0.274 nm  max stable bond dev 11.2%
+step  1440  T  301.4 K  orca 8.84 s  wall 7.65 s/step  groups 9355  O–C1 0.270 nm  max stable bond dev 11.2%
+step  1450  T  301.8 K  orca 7.62 s  wall 7.65 s/step  groups 9355  O–C1 0.265 nm  max stable bond dev 11.2%
+step  1460  T  300.0 K  orca 8.05 s  wall 7.65 s/step  groups 9355  O–C1 0.262 nm  max stable bond dev 11.2%
+step  1470  T  299.7 K  orca 7.70 s  wall 7.65 s/step  groups 9355  O–C1 0.261 nm  max stable bond dev 11.2%
+step  1480  T  299.3 K  orca 7.75 s  wall 7.66 s/step  groups 9355  O–C1 0.264 nm  max stable bond dev 11.2%
+step  1490  T  298.3 K  orca 7.70 s  wall 7.66 s/step  groups 9355  O–C1 0.268 nm  max stable bond dev 11.2%
+step  1500  T  299.2 K  orca 7.67 s  wall 7.66 s/step  groups 9355  O–C1 0.273 nm  max stable bond dev 11.2%
+step  1510  T  298.9 K  orca 7.52 s  wall 7.66 s/step  groups 9355  O–C1 0.277 nm  max stable bond dev 11.2%
+step  1520  T  300.7 K  orca 7.38 s  wall 7.66 s/step  groups 9355  O–C1 0.282 nm  max stable bond dev 11.2%
+step  1530  T  300.1 K  orca 6.96 s  wall 7.66 s/step  groups 9355  O–C1 0.286 nm  max stable bond dev 11.2%
+step  1540  T  299.8 K  orca 7.96 s  wall 7.66 s/step  groups 9355  O–C1 0.290 nm  max stable bond dev 11.2%
+step  1550  T  298.0 K  orca 7.58 s  wall 7.66 s/step  groups 9355  O–C1 0.292 nm  max stable bond dev 11.2%
+step  1560  T  298.1 K  orca 7.58 s  wall 7.66 s/step  groups 9355  O–C1 0.293 nm  max stable bond dev 11.2%
+step  1570  T  297.3 K  orca 7.89 s  wall 7.66 s/step  groups 9355  O–C1 0.295 nm  max stable bond dev 11.2%
+step  1580  T  296.0 K  orca 7.65 s  wall 7.66 s/step  groups 9355  O–C1 0.294 nm  max stable bond dev 11.2%
+step  1590  T  296.6 K  orca 7.65 s  wall 7.66 s/step  groups 9355  O–C1 0.293 nm  max stable bond dev 11.2%
+step  1600  T  297.4 K  orca 7.61 s  wall 7.66 s/step  groups 9355  O–C1 0.289 nm  max stable bond dev 11.2%
+step  1610  T  299.0 K  orca 8.15 s  wall 7.66 s/step  groups 9355  O–C1 0.285 nm  max stable bond dev 11.2%
+step  1620  T  298.6 K  orca 7.38 s  wall 7.66 s/step  groups 9355  O–C1 0.284 nm  max stable bond dev 11.2%
+step  1630  T  298.8 K  orca 7.38 s  wall 7.66 s/step  groups 9355  O–C1 0.284 nm  max stable bond dev 11.2%
+step  1640  T  297.7 K  orca 7.52 s  wall 7.66 s/step  groups 9355  O–C1 0.285 nm  max stable bond dev 11.2%
+step  1650  T  297.2 K  orca 7.31 s  wall 7.66 s/step  groups 9355  O–C1 0.288 nm  max stable bond dev 11.2%
+step  1660  T  298.2 K  orca 7.20 s  wall 7.66 s/step  groups 9355  O–C1 0.291 nm  max stable bond dev 11.2%
+step  1670  T  297.5 K  orca 7.49 s  wall 7.65 s/step  groups 9355  O–C1 0.292 nm  max stable bond dev 11.2%
+step  1680  T  296.6 K  orca 7.19 s  wall 7.65 s/step  groups 9355  O–C1 0.292 nm  max stable bond dev 11.2%
+step  1690  T  295.7 K  orca 7.46 s  wall 7.65 s/step  groups 9355  O–C1 0.290 nm  max stable bond dev 11.2%
+step  1700  T  295.9 K  orca 7.48 s  wall 7.66 s/step  groups 9355  O–C1 0.289 nm  max stable bond dev 11.2%
+step  1710  T  297.0 K  orca 7.56 s  wall 7.66 s/step  groups 9355  O–C1 0.287 nm  max stable bond dev 11.2%
+step  1720  T  298.0 K  orca 7.82 s  wall 7.66 s/step  groups 9355  O–C1 0.288 nm  max stable bond dev 11.2%
+step  1730  T  299.2 K  orca 7.44 s  wall 7.66 s/step  groups 9355  O–C1 0.287 nm  max stable bond dev 11.2%
+step  1740  T  299.4 K  orca 7.56 s  wall 7.66 s/step  groups 9355  O–C1 0.289 nm  max stable bond dev 11.2%
+step  1750  T  298.6 K  orca 7.70 s  wall 7.66 s/step  groups 9355  O–C1 0.290 nm  max stable bond dev 11.2%
+step  1760  T  297.5 K  orca 7.63 s  wall 7.66 s/step  groups 9355  O–C1 0.294 nm  max stable bond dev 11.2%
+step  1770  T  296.3 K  orca 7.50 s  wall 7.66 s/step  groups 9355  O–C1 0.297 nm  max stable bond dev 11.2%
+step  1780  T  296.3 K  orca 7.63 s  wall 7.66 s/step  groups 9355  O–C1 0.299 nm  max stable bond dev 11.2%
+step  1790  T  295.8 K  orca 8.04 s  wall 7.66 s/step  groups 9355  O–C1 0.301 nm  max stable bond dev 11.2%
+step  1800  T  296.0 K  orca 7.65 s  wall 7.66 s/step  groups 9355  O–C1 0.304 nm  max stable bond dev 11.2%
+step  1810  T  296.0 K  orca 7.53 s  wall 7.67 s/step  groups 9355  O–C1 0.306 nm  max stable bond dev 11.2%
+step  1820  T  298.0 K  orca 7.41 s  wall 7.66 s/step  groups 9355  O–C1 0.307 nm  max stable bond dev 11.2%
+step  1830  T  297.4 K  orca 7.78 s  wall 7.67 s/step  groups 9355  O–C1 0.308 nm  max stable bond dev 11.2%
+step  1840  T  298.1 K  orca 7.61 s  wall 7.67 s/step  groups 9355  O–C1 0.308 nm  max stable bond dev 11.2%
+step  1850  T  299.2 K  orca 7.61 s  wall 7.67 s/step  groups 9355  O–C1 0.311 nm  max stable bond dev 11.2%
+step  1860  T  300.9 K  orca 7.71 s  wall 7.67 s/step  groups 9355  O–C1 0.313 nm  max stable bond dev 11.2%
+step  1870  T  300.5 K  orca 7.83 s  wall 7.67 s/step  groups 9355  O–C1 0.312 nm  max stable bond dev 11.2%
+step  1880  T  297.0 K  orca 7.48 s  wall 7.67 s/step  groups 9355  O–C1 0.309 nm  max stable bond dev 11.2%
+step  1890  T  297.4 K  orca 7.40 s  wall 7.67 s/step  groups 9355  O–C1 0.307 nm  max stable bond dev 11.2%
+step  1900  T  299.4 K  orca 8.01 s  wall 7.67 s/step  groups 9355  O–C1 0.306 nm  max stable bond dev 11.2%
+step  1910  T  302.7 K  orca 7.50 s  wall 7.68 s/step  groups 9355  O–C1 0.306 nm  max stable bond dev 11.2%
+step  1920  T  301.1 K  orca 7.49 s  wall 7.67 s/step  groups 9355  O–C1 0.303 nm  max stable bond dev 11.2%
+step  1930  T  299.0 K  orca 7.60 s  wall 7.67 s/step  groups 9355  O–C1 0.297 nm  max stable bond dev 11.2%
+step  1940  T  299.0 K  orca 7.93 s  wall 7.68 s/step  groups 9355  O–C1 0.291 nm  max stable bond dev 11.2%
+step  1950  T  297.7 K  orca 7.59 s  wall 7.68 s/step  groups 9355  O–C1 0.287 nm  max stable bond dev 11.2%
+step  1960  T  297.6 K  orca 7.69 s  wall 7.68 s/step  groups 9355  O–C1 0.285 nm  max stable bond dev 11.2%
+step  1970  T  298.7 K  orca 7.37 s  wall 7.68 s/step  groups 9355  O–C1 0.285 nm  max stable bond dev 11.2%
+step  1980  T  299.2 K  orca 7.67 s  wall 7.68 s/step  groups 9355  O–C1 0.285 nm  max stable bond dev 11.2%
+step  1990  T  299.4 K  orca 7.48 s  wall 7.68 s/step  groups 9355  O–C1 0.285 nm  max stable bond dev 11.2%
+step  2000  T  298.2 K  orca 7.38 s  wall 7.68 s/step  groups 9355  O–C1 0.286 nm  max stable bond dev 11.2%
+Traceback (most recent call last):
+  File "/home/ruigengji/openmm-ORCA/examples/enzyme_qmmm.py", line 844, in <module>
+    main()
+  File "/home/ruigengji/openmm-ORCA/examples/enzyme_qmmm.py", line 840, in main
+    raise SystemExit(0 if run(args) else 1)
+                          ^^^^^^^^^
+  File "/home/ruigengji/openmm-ORCA/examples/enzyme_qmmm.py", line 494, in run
+    return run_qmmm(args, outdir, platform, topology, state, system, potential, record)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ruigengji/openmm-ORCA/examples/enzyme_qmmm.py", line 775, in run_qmmm
+    assert len(md_rows) == n_steps, f"{len(md_rows)} QM calls for {n_steps} steps"
+           ^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 2001 QM calls for 2000 steps
+=== done 2026-10-28 20:12:54 ===

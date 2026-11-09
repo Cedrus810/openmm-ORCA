@@ -1,0 +1,80 @@
+=== 2026-10-28 15:48:25  host yayoi42.cluster.local ===
+NVIDIA GeForce RTX 4080, 16376 MiB
+Loading orca/6.1.1
+  Loading requirement: gcc/13.3.0 openmpi/5.0.7_gcc13.3.0
+OPI_ORCA=/home/apps/orca_6_1_1_avx2  mpirun=/home/apps/openmpi/5.0.7_gcc13.3.0/bin/mpirun
+/home/ruigengji/miniforge3/envs/openmm_dev/lib/python3.12/site-packages/openff/interchange/smirnoff/_create.py:171: PresetChargesAndVirtualSitesWarning: Preset charges were provided (via `charge_from_molecules`) alongside a force field that includes virtual site parameters. Note that virtual sites will be applied charges from the force field and cannot be given preset charges. Virtual sites may also affect the charges of their orientation atoms, even if those atoms are given preset charges.
+  warnings.warn(
+/home/ruigengji/openmm-ORCA/examples/enzyme_qmmm.py:333: UserWarning: md_a_s2/equilibrated.xml: reusing cache although identity.system_sha256 differ
+  manifest = cache.load()
+/home/ruigengji/openmm-ORCA/openmmorca/backend/orca_opi.py:123: UserWarning: nprocs=12 exceeds the estimated number of physical cores (10); running beyond physical cores typically slows ORCA down
+  warnings.warn(
+QM region A: 14 atoms + 1 link H, method r2SCAN-3c 
+Traceback (most recent call last):
+  File "/home/ruigengji/openmm-ORCA/examples/enzyme_qmmm.py", line 847, in <module>
+    main()
+  File "/home/ruigengji/openmm-ORCA/examples/enzyme_qmmm.py", line 843, in main
+    raise SystemExit(0 if run(args) else 1)
+                          ^^^^^^^^^
+  File "/home/ruigengji/openmm-ORCA/examples/enzyme_qmmm.py", line 497, in run
+    return run_qmmm(args, outdir, platform, topology, state, system, potential, record)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ruigengji/openmm-ORCA/examples/enzyme_qmmm.py", line 712, in run_qmmm
+    simulation.step(1)
+  File "/home/ruigengji/miniforge3/envs/openmm_dev/lib/python3.12/site-packages/openmm/app/simulation.py", line 149, in step
+    self._simulate(endStep=self.currentStep+steps)
+  File "/home/ruigengji/miniforge3/envs/openmm_dev/lib/python3.12/site-packages/openmm/app/simulation.py", line 232, in _simulate
+    self.integrator.step(stepsToGo)
+  File "/home/ruigengji/miniforge3/envs/openmm_dev/lib/python3.12/site-packages/openmm/openmm.py", line 16460, in step
+    return _openmm.LangevinMiddleIntegrator_step(self, steps)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+openmm.OpenMMException: ORCA did not terminate normally (basename qm in /dev/shm/openmmorca-ruigengji/22ca871899fc447c83b12b6382922437/current); ORCA's process return code is not trustworthy. Last output lines:
+  |  Group   2 Type H   : 5s2p1d contracted to 3s1p1d pattern {311/2/1}
+  |  Group   3 Type O   : 8s3p3d contracted to 6s3p3d pattern {311111/111/111}
+  |  Group   4 Type Cl  : 14s5p5d2f contracted to 8s4p3d1f pattern {71111111/2111/311/2}
+  | 
+  | Atom   0C    basis set group =>   1
+  | Atom   1H    basis set group =>   2
+  | Atom   2H    basis set group =>   2
+  | Atom   3C    basis set group =>   1
+  | Atom   4O    basis set group =>   3
+  | Atom   5O    basis set group =>   3
+  | Atom   6Cl   basis set group =>   4
+  | Atom   7C    basis set group =>   1
+  | Atom   8C    basis set group =>   1
+  | Atom   9Cl   basis set group =>   4
+  | Atom  10H    basis set group =>   2
+  | Atom  11H    basis set group =>   2
+  | Atom  12H    basis set group =>   2
+  | Atom  13H    basis set group =>   2
+  | Atom  14H    basis set group =>   2
+  | 
+  | ORCA finished by error termination in Startup
+  | Calling Command: mpirun -np 12  /home/apps/orca_6_1_1_avx2/orca_startup_mpi qm.int.tmp qm 
+  | [file orca_tools/qcmsg.cpp, line 394]: 
+  |   .... aborting the run
+  | 
+  | available for use.
+  | 
+  | A "slot" is the PRRTE term for an allocatable unit where we can
+  | launch a process.  The number of slots available are defined by the
+  | environment in which PRRTE processes are run:
+  | 
+  |   1. Hostfile, via "slots=N" clauses (N defaults to number of
+  |      processor cores if not provided)
+  |   2. The --host command line parameter, via a ":N" suffix on the
+  |      hostname (N defaults to 1 if not provided)
+  |   3. Resource manager (e.g., SLURM, PBS/Torque, LSF, etc.)
+  |   4. If none of a hostfile, the --host command line parameter, or an
+  |      RM is present, PRRTE defaults to the number of processor cores
+  | 
+  | In all the above cases, if you want PRRTE to default to the number
+  | of hardware threads instead of the number of processor cores, use the
+  | --use-hwthread-cpus option.
+  | 
+  | Alternatively, you can use the --map-by :OVERSUBSCRIBE option to ignore the
+  | number of available slots when deciding the number of processes to
+  | launch.
+  | --------------------------------------------------------------------------
+  | 
+=== done 2026-10-28 15:50:25 ===

@@ -1,0 +1,21 @@
+{
+ "n_embed_groups": 500,
+ "dE_lattice_shift_eh": 0.0,
+ "dE_wrapped_eh": 0.0,
+ "far_mm_o": 1440,
+ "far_mm_o_distance_nm": 2.0355465334892253,
+ "fd_max_err_kj_mol_nm": 48.71209423426217,
+ "t_orca_median_s": 0.4388097039773129
+}
+atom    0 axis 0  fd    1195.1603  analytic    1195.1616  err 1.27e-03
+atom    0 axis 1  fd     121.0017  analytic     120.9857  err 1.60e-02
+atom    0 axis 2  fd    2769.4966  analytic    2769.5000  err 3.38e-03
+atom    1 axis 0  fd     -48.7358  analytic     -48.7324  err 3.34e-03
+atom    1 axis 1  fd   -1171.3320  analytic   -1171.3087  err 2.33e-02
+atom    1 axis 2  fd   -1396.2274  analytic   -1396.2252  err 2.22e-03
+atom   21 axis 0  fd  -65413.0944  analytic  -65413.1199  err 2.56e-02
+atom   21 axis 1  fd  113065.9190  analytic  113065.5027  err 4.16e-01
+atom   21 axis 2  fd   92395.6056  analytic   92395.4139  err 1.92e-01
+atom 1440 axis 0  fd     267.5920  analytic     267.6005  err 8.52e-03
+atom 1440 axis 1  fd     236.6840  analytic     236.6805  err 3.50e-03
+atom 1440 axis 2  fd    2071.1950  analytic    2119.9071  err 4.87e+01

@@ -1,0 +1,6 @@
+atom 1440 axis 2 QM: fd       0.2721 analytic       0.2721 err 6.647e-06  embed_changed 0
+atom 1440 axis 2 MM: fd    2070.9227 analytic    2119.6350 err 4.871e+01  embed_changed 0
+atom 1440 axis 0 QM: fd       0.4999 analytic       0.4999 err 8.313e-06  embed_changed 0
+atom 1440 axis 0 MM: fd     267.0921 analytic     267.1007 err 8.525e-03  embed_changed 0
+atom 21 axis 1 QM: fd      -5.6320 analytic      -5.6320 err 5.489e-07  embed_changed 0
+atom 21 axis 1 MM: fd  113071.5510 analytic  113071.1347 err 4.163e-01  embed_changed 0

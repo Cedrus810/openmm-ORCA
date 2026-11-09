@@ -1,12 +1,19 @@
-"""Cutoff embedding for periodic QM/MM (spec §11.1, Task 20).
+"""Periodic electrostatic embedding: cutoff or whole-box (spec §11.1, Task 20, roadmap B4).
 
-The QM region sees only MM charge groups (residues by default) that come
-within ``cutoff_nm`` of any QM atom under the minimum-image convention; a
-selected group is embedded whole, at the image nearest the QM region.
+Two selection modes share one placement rule: each embedded MM charge group
+(residue by default) is kept whole and placed at the image of its atom
+nearest the QM region (atom images taken relative to the first QM atom).
 
-**This is an approximation**: QM–MM electrostatics beyond the cutoff are
-neglected, and groups entering or leaving the sphere make the energy
-discontinuous. It is not PME-consistent.
+* ``cutoff_nm`` a number: only groups with an atom within ``cutoff_nm`` of a
+  QM atom (minimum image) are embedded (spec §11.1, the v0.4 default).
+* ``cutoff_nm=None``: every group in the box is embedded at that minimum
+  image (scheme S2 of ``docs/plans/2026-10-17-b4-embedding-options.md``).
+  The embedded charge then equals the total MM charge at every step; a group
+  only changes image near the face of the cell centred on the QM anchor.
+
+**Both are approximations**: periodic images beyond the chosen one are
+neglected, and groups entering/leaving the sphere (cutoff) or switching
+image (whole box) make the energy discontinuous. Neither is PME-consistent.
 
 Charges passed in are the final embedding charges: at link-atom boundaries
 they are already charge-shifted, and M1 is in no group (prep C8).
@@ -64,16 +71,19 @@ def groups_from_topology(topology: openmm.app.Topology, mm_atoms) -> list[tuple[
 
 
 class CutoffEmbedding:
-    """Per-step selection of whole MM charge groups within a cutoff of the QM region."""
+    """Per-step selection of whole MM charge groups around the QM region.
+
+    ``cutoff_nm=None`` embeds every group (whole-box minimum image).
+    """
 
     def __init__(
         self,
         groups: Sequence[tuple[int, ...]],
         charges_e: np.ndarray,
-        cutoff_nm: float = 1.2,
+        cutoff_nm: float | None = 1.2,
     ) -> None:
-        if cutoff_nm <= 0:
-            raise ValueError(f"cutoff must be positive, got {cutoff_nm}")
+        if cutoff_nm is not None and not cutoff_nm > 0:
+            raise ValueError(f"cutoff must be positive or None, got {cutoff_nm}")
         self.groups = [tuple(int(i) for i in group) for group in groups]
         seen: set[int] = set()
         for group in self.groups:
@@ -85,7 +95,7 @@ class CutoffEmbedding:
                 )
             seen.update(group)
         self.charges_e = np.asarray(charges_e, dtype=float)
-        self.cutoff_nm = float(cutoff_nm)
+        self.cutoff_nm = None if cutoff_nm is None else float(cutoff_nm)
         self._atoms = np.array([i for group in self.groups for i in group], dtype=int)
         self._group_of = np.repeat(
             np.arange(len(self.groups)), [len(group) for group in self.groups]
@@ -94,8 +104,12 @@ class CutoffEmbedding:
         self._group_start = np.concatenate(
             [[0], np.cumsum([len(group) for group in self.groups])[:-1]]
         ).astype(int)
-        self._previous: set[int] = set()
+        # Previous step: which groups were embedded, and where each group's
+        # first atom sat relative to the QM anchor (to detect image switches).
+        self._previous = np.zeros(len(self.groups), dtype=bool)
+        self._previous_offset = np.zeros((len(self.groups), 3))
         self.last_n_groups: int = 0
+        self.last_reimaged: int = 0
         self.last_changed: int = 0
 
     def select(
@@ -111,47 +125,60 @@ class CutoffEmbedding:
         """
         qm = np.asarray(qm_positions_nm, dtype=float)
         box = np.asarray(box_vectors_nm, dtype=float)
-        if len(qm) > 1:
-            extent = float(
-                np.max(np.linalg.norm(qm[:, None, :] - qm[None, :, :], axis=-1))
-            )
-        else:
-            extent = 0.0
-        check_cutoff_against_box(self.cutoff_nm, box, extent)
+        if self.cutoff_nm is not None:
+            if len(qm) > 1:
+                extent = float(
+                    np.max(np.linalg.norm(qm[:, None, :] - qm[None, :, :], axis=-1))
+                )
+            else:
+                extent = 0.0
+            check_cutoff_against_box(self.cutoff_nm, box, extent)
 
         if len(self._atoms) == 0:
-            return self._finish(set(), np.zeros(0, dtype=int), np.zeros((0, 3)))
+            return self._finish(
+                np.zeros(0, dtype=bool), np.zeros((0, 3)), box,
+                np.zeros(0, dtype=int), np.zeros((0, 3)),
+            )
 
         anchor = qm[0]
         positions = np.asarray(positions_nm, dtype=float)[self._atoms]
-        # Atom-wise nearest images relative to the QM anchor; with the bound
-        # checked above these give the true minimum-image distance to every
-        # QM atom that is within the cutoff.
+        # Atom-wise nearest images relative to the QM anchor; with the cutoff
+        # bound checked above these give the true minimum-image distance to
+        # every QM atom that is within the cutoff.
         near = anchor + minimum_image(positions - anchor, box)
         distance = np.min(np.linalg.norm(near[:, None, :] - qm[None, :, :], axis=-1), axis=1)
-        inside = distance < self.cutoff_nm
-        selected_groups = sorted(set(self._group_of[inside].tolist()))
+        if self.cutoff_nm is None:
+            selected = np.ones(len(self.groups), dtype=bool)
+        else:
+            selected = np.zeros(len(self.groups), dtype=bool)
+            selected[self._group_of[distance < self.cutoff_nm]] = True
 
         # Whole groups: internal geometry from each group's first atom, placed
-        # at the image of the group's atom closest to the QM region.
+        # at the image of the group's atom closest to the QM region (first
+        # such atom on ties).
         internal = minimum_image(
             positions - positions[self._group_start[self._group_of]], box
         )
-        out_atoms, out_positions = [], []
-        for g in selected_groups:
-            members = np.nonzero(self._group_of == g)[0]
-            best = members[np.argmin(distance[members])]
-            placed = near[best] + internal[members] - internal[best]
-            out_atoms.append(self._atoms[members])
-            out_positions.append(placed)
-        if not selected_groups:
-            return self._finish(set(), np.zeros(0, dtype=int), np.zeros((0, 3)))
+        best = np.lexsort((distance, self._group_of))[self._group_start]
+        best_of_atom = best[self._group_of]
+        placed = near[best_of_atom] + internal - internal[best_of_atom]
+        mask = selected[self._group_of]
         return self._finish(
-            set(selected_groups), np.concatenate(out_atoms), np.vstack(out_positions)
+            selected, placed[self._group_start] - anchor, box,
+            self._atoms[mask], placed[mask],
         )
 
-    def _finish(self, selected: set[int], atoms: np.ndarray, positions: np.ndarray):
-        self.last_n_groups = len(selected)
-        self.last_changed = len(selected ^ self._previous)
+    def _finish(self, selected, offsets, box, atoms: np.ndarray, positions: np.ndarray):
+        kept = selected & self._previous
+        reimaged = 0
+        if kept.any():
+            # A group kept from the previous step changed image when its offset
+            # from the QM anchor jumped by a lattice vector.
+            shift = (offsets[kept] - self._previous_offset[kept]) @ np.linalg.inv(box)
+            reimaged = int(np.count_nonzero(np.any(np.rint(shift) != 0, axis=1)))
+        self.last_n_groups = int(np.count_nonzero(selected))
+        self.last_reimaged = reimaged
+        self.last_changed = int(np.count_nonzero(selected ^ self._previous)) + reimaged
         self._previous = selected
+        self._previous_offset = offsets
         return atoms, positions, self.charges_e[atoms]

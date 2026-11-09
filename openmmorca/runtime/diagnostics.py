@@ -18,8 +18,12 @@ TIMING_FIELDS = (
     "scf_cycles",
     "restart_used",
     "fresh_retries",
-    "n_embed_groups",  # periodic cutoff embedding: groups embedded this step
-    "embed_changed",  # groups that entered or left since the previous step
+    "n_embed_groups",  # periodic embedding: groups embedded this step
+    "embed_changed",  # groups that entered, left or switched image since the previous step
+    "t_vpot",  # S3: orca_vpot call for the electrostatic potential at the pseudo charges
+    "t_ewald",  # S3: classical Ewald correction (coefficients + MM forces), from the OpenMM layer
+    "s3_q_absmax",  # S3: largest |pseudo charge| (e)
+    "s3_qm_extent_nm",  # S3: largest distance of a QM request atom from the expansion centre
 )
 
 BUNDLE_FILES = (
@@ -30,6 +34,9 @@ BUNDLE_FILES = (
     "qm.engrad",
     "qm.pcgrad",
     "guess.gbw",
+    "esp.xyz",  # S3: orca_vpot points, output and log
+    "esp.out",
+    "esp.log",
 )
 
 

@@ -22,6 +22,7 @@ Known limitations (verified on OpenMM 8.5.2, see spec §2.8):
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 from typing import Sequence
 
@@ -31,6 +32,7 @@ from openmm import unit
 
 from openmmorca.backend.base import QMBackend, QMRequest, check_result
 from openmmorca.qmmm.embedding import CutoffEmbedding
+from openmmorca.qmmm.ewald_correction import EwaldCorrection
 from openmmorca.qmmm.imaging import make_qm_whole
 from openmmorca.qmmm.linkatoms import LinkAtomManager
 
@@ -129,6 +131,7 @@ class QMMMCallback:
         link_manager: LinkAtomManager | None = None,
         embedding: CutoffEmbedding | None = None,
         qm_graph: dict[int, list[int]] | None = None,
+        ewald_correction: EwaldCorrection | None = None,
     ) -> None:
         self.backend = backend
         self.qm_atoms = tuple(int(i) for i in qm_atoms)
@@ -147,9 +150,14 @@ class QMMMCallback:
         if (embedding is None) != (qm_graph is None):
             raise ValueError("embedding and qm_graph must be given together")
         # Periodic mode: re-image the QM region (and boundary M1) each step and
-        # embed only the MM groups within the cutoff (spec §11).
+        # embed the MM groups within the cutoff, or every group (spec §11).
         self.embedding = embedding
         self.qm_graph = qm_graph
+        # S3: classical Ewald correction on top of whole-box embedding (ewald_correction.py).
+        if ewald_correction is not None and (embedding is None or embedding.cutoff_nm is not None):
+            raise ValueError("the Ewald correction (S3) requires whole-box embedding (embeddingCutoff=None)")
+        self.ewald_correction = ewald_correction
+        self.last_ewald_force_s: float = 0.0
         n_links = link_manager.n_links if link_manager is not None else 0
         # Link atoms are hydrogen caps appended after the QM atoms.
         self._request_elements = self.qm_elements + ("H",) * n_links
@@ -190,7 +198,7 @@ class QMMMCallback:
             }
             if self.embedding.last_changed:
                 logger.debug(
-                    "step %d: %d embedding groups entered/left the cutoff (%d embedded)",
+                    "step %d: %d embedding groups entered/left/switched image (%d embedded)",
                     self.step,
                     self.embedding.last_changed,
                     self.embedding.last_n_groups,
@@ -200,6 +208,22 @@ class QMMMCallback:
         elif self.mm_atoms:
             mm_positions = positions[list(self.mm_atoms)]
             mm_charges = self.mm_charges_e
+        correction = None
+        esp_points = None
+        n_real = 0 if mm_positions is None else len(mm_positions)
+        if self.ewald_correction is not None and n_real > 0:
+            t0 = time.perf_counter()
+            center = qm_positions.mean(axis=0)  # QM request atoms, link H included
+            correction = self.ewald_correction.prepare(center, mm_positions, mm_charges, box)
+            mm_positions = np.vstack([mm_positions, correction.pseudo_positions_nm])
+            mm_charges = np.concatenate([mm_charges, correction.pseudo_charges_e])
+            esp_points = correction.pseudo_positions_nm
+            diagnostics = {
+                **diagnostics,
+                "t_ewald": time.perf_counter() - t0,
+                "s3_q_absmax": float(np.abs(correction.pseudo_charges_e).max()),
+                "s3_qm_extent_nm": float(np.linalg.norm(qm_positions - center, axis=1).max()),
+            }
         request = QMRequest(
             qm_elements=self._request_elements,
             qm_positions_nm=qm_positions,
@@ -207,17 +231,32 @@ class QMMMCallback:
             mm_charges_e=mm_charges,
             step=self.step,
             diagnostics=diagnostics,
+            esp_points_nm=esp_points,
         )
         result = self.backend.evaluate(request)
         check_result(request, result)
 
+        qm_forces = np.array(result.qm_forces_kj_mol_nm, dtype=float)
+        mm_forces = None if request.n_mm == 0 else np.array(result.mm_forces_kj_mol_nm[:n_real], dtype=float)
+        if correction is not None:
+            # E depends on the MM charges also through the pseudo charges Q = W c(p, r_c),
+            # and on the QM atoms through r_c (pseudo positions and c); see ewald_correction.py.
+            t0 = time.perf_counter()
+            m = self.ewald_correction.moments(result.esp_kj_mol_e)
+            extra = self.ewald_correction.mm_forces(correction, m)
+            pseudo_gradient = -result.mm_forces_kj_mol_nm[n_real:]
+            center_gradient = pseudo_gradient.sum(axis=0) + extra.sum(axis=0)
+            mm_forces += extra
+            qm_forces -= center_gradient / len(qm_forces)
+            self.last_ewald_force_s = time.perf_counter() - t0
+
         forces = np.zeros((self.n_particles, 3))
         n_qm = len(self.qm_atoms)
-        forces[list(self.qm_atoms)] = result.qm_forces_kj_mol_nm[:n_qm]
+        forces[list(self.qm_atoms)] = qm_forces[:n_qm]
         if self.link_manager is not None:
-            self.link_manager.redistribute(forces, result.qm_forces_kj_mol_nm[n_qm:])
-        if request.n_mm > 0:
-            forces[list(mm_atoms)] += result.mm_forces_kj_mol_nm
+            self.link_manager.redistribute(forces, qm_forces[n_qm:])
+        if mm_forces is not None:
+            forces[list(mm_atoms)] += mm_forces
         # Move site forces to the parents and clear their entries so OpenMM
         # will not distribute these contributions a second time.
         _redistribute_virtual_site_forces(forces, site_positions, self._vsite_redistribution)

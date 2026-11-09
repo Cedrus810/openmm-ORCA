@@ -123,3 +123,33 @@ Ewald 自检：α = 1.2 nm⁻¹ / n_max = 14 与 α = 1.6 / n_max = 20 两组设
 1. 是否采用 S2 作为新的默认嵌入方式（或作为可选模式），进入实现：修改 `embedding.py` 的选组方式和盒宽校验，更新设计稿 §11 和 docstring，补测试和有限差分检查。
 2. S2 剩下的恒定场偏置（伸缩力约 39 kJ/mol/nm）是否可以接受，还是要考虑 S3（需要改设计稿 §1.2 的非目标）。
 3. B3 的建议：方案 C 的完整应用推迟到 B4 定下来之后。
+
+## 8. S2 可选模式实现（2026-10-28）
+
+用户 2026-10-28 粘贴了一段建议（第 1 条："S2 先作为可选模式实现，补有限差分、周期平移及镜像切换检查，再做小体系真实运行验证"），并说"继续往下推"。按这条实现了 S2，**S2 只是可选模式，默认仍是 1.2 nm 截断**。§7 的第 2、3 条（剩余偏置是否接受、方案 C 是否推迟）没有动。
+
+实现：
+- `openmmorca/qmmm/embedding.py`：`CutoffEmbedding(cutoff_nm=None)` 嵌入盒内全部组。放置规则与截断模式相同，都是"整组放在组内离 QM 区最近的原子所在的镜像上"，与第 1、2 阶段原型用的规则一致。全盒模式不做 cutoff + D 的盒宽校验。放置改成了向量化，两种模式共用。
+- `embed_changed` 现在统计"进入 + 离开 + 换镜像"的组数（`last_reimaged` 单独给出换镜像的数目）。换镜像的判据是：组的第一个原子相对 QM 锚点的位置跳了一个晶格矢量。截断模式在盒宽约束下不会换镜像，所以计数和原来相同。
+- `ORCAPotential.createMixedSystem(..., embeddingCutoff=None)` 启用全盒模式，docstring 写明它仍然不是 PME 一致的。
+- `examples/enzyme_qmmm.py`：`--cutoff none` 启用全盒模式；`run.json` 中记作 `cutoff_nm: null`，用不同的 cutoff 续跑会被拒绝。对应测试 `tests/test_enzyme_workflow.py::test_whole_box_cutoff_recorded_and_checked_on_resume`，该文件 51 passed。
+
+检查（产物在 `experiments/2026-10-28_b4_s2_impl/`）：
+- 新旧放置对照（`check_placement.py` → `check_placement.log`）：用 T09 的 20 帧、方案 A 和 C，S0（1.2 nm）与 S2 各跑一遍。新代码与改动前的逐组循环版本（`embedding_before.py`；S2 按原型的做法，cutoff 取 100 nm 并关掉盒宽检查）选出的原子、坐标、电荷 **20/20 帧逐位相同**。S2 嵌入总电荷为 +1.000 e。`select()` 每次的耗时（181，中位数）：方案 A 下 S2 从 0.214 s 降到 0.031 s，S0 为 0.029 s（原来 0.026 s）；方案 C 下 S2 为 0.107 s（原来 0.267 s）。相隔 100 步的帧之间约有 80–98 个组换镜像。
+- 真实 ORCA，2.5 nm TIP3P 盒，QM 为 1 个水，HF/STO-3G TightSCF，Reference 平台（`fd_orca_water_box.py` → `fd_orca_water_box.log`、`fd_orca_water_box/result.json`）：嵌入 500 个组，也就是全部 MM 水。整体平移一个晶格矢量后能量差 0.0 Eh；单独把一个 QM H 和一个 MM 水各平移一个晶格矢量，能量差也是 0.0 Eh。在 Context 总能量上做中心差分（h = 1e-4 nm）：QM O、QM H、MM 原子 21 共 9 个分量，误差 ≤ 0.42 kJ/mol/nm。最远的 MM O（原子 1440，离 QM 2.04 nm）的 z 分量误差为 48.7。拆开力组后（`fd_split_groups.py` → `fd_split_groups.log`），QM 力组的误差为 7e-6 kJ/mol/nm，48.7 全部来自 MM 力组；水盒用的是 1.0 nm 截断、没有开关函数的 PME/LJ，误差来自那里，与嵌入无关。各步都没有发生换镜像（`embed_changed` = 0）。ORCA 每步中位数 0.44 s。
+- 测试：`tests/test_embedding.py` 新增 6 个用例；`tests/test_periodic_fake.py` 新增 4 个（全盒嵌入全部电荷、有限差分、晶格不变性、换镜像）；`tests/test_periodic_orca.py` 新增 1 个（真实 ORCA 不变性 + 有限差分）。快速回归 `-m 'not orca and not slow'` 结果为 205 passed；`tests/test_periodic_orca.py` 2 passed。
+
+- 酶体系冒烟（181，`md_a_s2_smoke.sh` → `md_a_s2_smoke.log`、`md_a_s2_smoke/`）：方案 A，r2SCAN-3c，np32（核 4–35），CUDA，10 步。起始状态与 2026-10-05 的方案 A 运行相同（`prepared.pdb`/`equilibrated.xml` 从 B3 的 `md_c/` 复制）。每步嵌入 9,355 个组，平均 8.1 s/步（ORCA 6.9 s，写 0.09 s，读 0.17 s），第 2–10 步每步有 0–5 个组换镜像，没有 fresh 重试，冒烟检查 PASS。
+- 1 ps 正式运行的 PBS 脚本：`md_a_s2.pbs.zsh`（yayoi42，i7-12700K + RTX 4080 Super，ORCA np12），输出到 `md_a_s2/`，可续跑（重新提交时从最近的检查点接着跑）。脚本里 ORCA 用 `module load orca/6.1.1`（用户 2026-10-28 说明，该模块会自动加载 gcc/13.3.0 和 openmpi/5.0.7_gcc13.3.0），`OPI_ORCA` 取模块里 `orca` 所在的目录；在计算节点上没有冒烟过。
+
+- 2026-10-28 第一次提交（yayoi29，作业 19792）没有算到 QM：启动后约 2 分钟退出，报 `CacheMismatchError: ... identity.system_sha256`。同样的输入和环境在 yayoi29 上序列化出的 MM System 与 181 上不同，哪个参数不同没有查。按用户同意（"好的"），先把 `system_sha256` 改成只警告。第二次提交（yayoi42，作业 19797）通过了缓存这一步，但第一步 ORCA 在 Startup 失败：`mpirun -np 12` 报 not enough slots。用户随后说"把愚蠢的sha 给我关了"，于是 `examples/enzyme_workflow.py` 的 `different_fields` 不再比较任何以 `sha256` 结尾的字段（仍然记录），并去掉了缓存产物、检查点文件和 steps.csv 前缀的 sha256 校验；前面加的只警告机制也撤掉了。`tests/test_enzyme_workflow.py` 中 6 个检查 sha 拦截的用例相应删改，现在 47 passed。PBS 脚本的 select 加上 `mpiprocs=12`（不写时 slot 不够，这是推测，没有核实）；run.json 存在但还没有检查点时，脚本自动用 `--archive-existing` 重新开始。之后改投 yayoi42。
+
+### 8.1 方案 A + S2 1 ps 运行（2026-10-28，yayoi42，作业 19798）
+
+- 设置：yayoi42（i7-12700K + RTX 4080 Super），ORCA np12（`module load orca/6.1.1`），CUDA，r2SCAN-3c，`--cutoff none`。2000 步从 15:56 跑到 20:12，没有中断。输出在 `experiments/2026-10-28_b4_s2_impl/md_a_s2/`，日志 `b4_s2_dhla_A.o19798`。
+- `examples/analyze_enzyme_run.py` 从产物独立重算：2000/2000 步；最后 500 步 T = 298.2 ± 1.5 K；键偏差 11.2 %（steps.csv）/ 10.8 %（DCD，200 帧）；t_orca 平均 7.52 s，p95 8.01 s；SCF 平均 9.5 圈，最多 12 圈；没有 fresh 重试；1752 步有组换镜像。**Task 22 PASS。**
+- 运行脚本最后一步报 `AssertionError: 2001 QM calls for 2000 steps`，所以 `acceptance.json` 写成了 FAILED；`run.json` 是 completed，轨迹、检查点、最终结构都写完了。多出来的一次调用发生在第 1 步：该步墙钟 23.1 s，`steps.csv` 第 1 行的 `restart_used` = 1、`embed_changed` = 0，说明第 1 步之内已经有过一次 QM 调用。181 上的冒烟没有出现这种情况（第 1 步 8.1 s，`embed_changed` = 9355）。为什么第 1 步调用了两次，没有查。
+- 与 2026-10-05 方案 A + S0 运行的对照（同一起始状态，不同硬件）：S0 是 5.3 s/步（181，np32）、298.6 ± 1.4 K、键偏差 17.3 %；S2 是 7.68 s/步（yayoi42，np12）、298.2 ± 1.5 K、11.2 %。两条轨迹从第 1 步起就因 QM 力不同而分开，所以键偏差的差别不能当作两种方案的统计差异。
+- 2026-10-29 按用户同意（"可以"）：删掉 `examples/enzyme_qmmm.py` 末尾"QM 调用次数 = 步数"的断言。用 `rewrite_acceptance.py` 调用运行时同一个 `acceptance_summary`，按 steps.csv 重写了 `md_a_s2/acceptance.json`（status PASS，Task 22 PASS，298.18 ± 1.53 K，键偏差 11.2 %）；原文件保留为 `acceptance.assertion-failed.json`。`analyze_enzyme_run.py` 复核结论一致，不再报 PROBLEM。
+
+还没做：用 S2 比较方案 A 和 C（建议第 2 条）。

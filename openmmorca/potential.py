@@ -25,6 +25,7 @@ from openmmorca.qmmm.embedding import (
     check_cutoff_against_box,
     groups_from_topology,
 )
+from openmmorca.qmmm.ewald_correction import EwaldCorrection
 from openmmorca.qmmm.imaging import qm_bond_graph
 from openmmorca.qmmm.linkatoms import LinkAtomManager, make_boundary_pairs
 
@@ -136,6 +137,7 @@ class ORCAPotential:
         boundaryPairs: Sequence[tuple[int, int]] | None = None,
         linkRatios: Sequence[float] | None = None,
         embeddingCutoff=1.2 * unit.nanometer,
+        ewaldCorrection: bool = False,
     ) -> mm.System:
         """Build a QM/MM System: *atoms* (OpenMM indices) are treated by ORCA.
 
@@ -148,6 +150,21 @@ class ORCAPotential:
         the QM region sees only the MM residues within *embeddingCutoff* of a
         QM atom (minimum image, whole residues). QM–MM electrostatics beyond
         embeddingCutoff are neglected; this is not PME-consistent.
+
+        ``embeddingCutoff=None`` embeds every MM residue in the box at its
+        minimum image relative to the QM region instead (whole-box embedding).
+        Images beyond that one are neglected and residues switching image near
+        the cell face cause small discontinuities; this is not PME-consistent
+        either.
+
+        ``ewaldCorrection=True`` (only with ``embeddingCutoff=None``) adds the
+        S3 correction: the second-order Taylor expansion of the classical
+        Ewald-minus-whole-box potential of the same MM charges about the QM
+        centre, represented by pseudo point charges, with the corresponding
+        MM and QM forces (needs the QM electrostatic potential at those
+        charges, from ``orca_vpot``). QM charges still do not enter OpenMM's
+        PME and QM self images are absent, so this is still not PME-consistent
+        QM/MM. See ``openmmorca.qmmm.ewald_correction``.
         """
         if interpolate:
             raise NotImplementedError(
@@ -175,20 +192,28 @@ class ORCAPotential:
                 stacklevel=2,
             )
         periodic = parts.system.usesPeriodicBoundaryConditions()
+        if ewaldCorrection and not (periodic and embeddingCutoff is None):
+            raise ValueError(
+                "ewaldCorrection=True requires a periodic system with whole-box embedding "
+                "(embeddingCutoff=None)"
+            )
         embedding = qm_graph = None
         if periodic:
-            cutoff_nm = (
-                embeddingCutoff.value_in_unit(unit.nanometer)
-                if hasattr(embeddingCutoff, "value_in_unit")
-                else float(embeddingCutoff)
-            )
-            box = np.array(
-                [
-                    v.value_in_unit(unit.nanometer)
-                    for v in parts.system.getDefaultPeriodicBoxVectors()
-                ]
-            )
-            check_cutoff_against_box(cutoff_nm, box)
+            if embeddingCutoff is None:
+                cutoff_nm = None
+            else:
+                cutoff_nm = (
+                    embeddingCutoff.value_in_unit(unit.nanometer)
+                    if hasattr(embeddingCutoff, "value_in_unit")
+                    else float(embeddingCutoff)
+                )
+                box = np.array(
+                    [
+                        v.value_in_unit(unit.nanometer)
+                        for v in parts.system.getDefaultPeriodicBoxVectors()
+                    ]
+                )
+                check_cutoff_against_box(cutoff_nm, box)
             charges = np.zeros(parts.system.getNumParticles())
             charges[list(parts.mm_atoms)] = parts.mm_charges_e
             embedding = CutoffEmbedding(
@@ -206,6 +231,7 @@ class ORCAPotential:
             link_manager=LinkAtomManager(pairs) if pairs else None,
             embedding=embedding,
             qm_graph=qm_graph,
+            ewald_correction=EwaldCorrection() if ewaldCorrection else None,
         )
         force = make_python_force(callback, force_group=forceGroup, periodic=periodic)
         parts.system.addForce(force)
