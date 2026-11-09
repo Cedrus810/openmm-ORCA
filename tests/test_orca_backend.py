@@ -177,3 +177,50 @@ def test_xtb_runs(scratch_root):
     assert np.all(np.isfinite(result.qm_forces_kj_mol_nm))
     assert np.all(np.isfinite(result.mm_forces_kj_mol_nm))
     backend.close()
+
+
+# ------------------------------------------------------------------
+# Electrostatic potential via orca_vpot (S3, V3 plan Task 2)
+# ------------------------------------------------------------------
+
+
+@pytest.mark.orca
+def test_orca_esp_matches_charge_derivative(scratch_root):
+    """orca_vpot at a point = dE/dq of a point charge there (Hellmann–Feynman, variational SCF).
+
+    Central difference in q with h = 0.02 e and TightSCF (TolE 1e-8 Eh): the difference noise is
+    ~1e-8/0.02 = 5e-7 Eh/e; the quadratic polarization term cancels. Tolerance 1e-5 Eh/e.
+    """
+    from openmmorca.units import HARTREE_IN_KJ_MOL
+
+    point = np.array([[0.0, 0.45, 0.2]])
+    backend = make_backend(scratch_root, **HF_DEF2SVP, extra_keywords=("TightSCF",), restart=False)
+    try:
+        request = QMRequest(qm_elements=WATER_ELEMENTS, qm_positions_nm=WATER_NM.copy(),
+                            mm_positions_nm=PC_NM.copy(), mm_charges_e=PC_CHARGES.copy(),
+                            esp_points_nm=point)
+        result = backend.evaluate(request)
+        assert result.timings_s["vpot"] > 0
+        energies = []
+        for sign in (1, -1):
+            r = QMRequest(qm_elements=WATER_ELEMENTS, qm_positions_nm=WATER_NM.copy(),
+                          mm_positions_nm=np.vstack([PC_NM, point]),
+                          mm_charges_e=np.concatenate([PC_CHARGES, [sign * 0.02]]))
+            energies.append(backend.evaluate(r).energy_kj_mol)
+    finally:
+        backend.close()
+    fd = (energies[0] - energies[1]) / (2 * 0.02)
+    assert abs(result.esp_kj_mol_e[0] - fd) / HARTREE_IN_KJ_MOL < 1e-5
+
+
+@pytest.mark.orca
+def test_orca_no_esp_unchanged(scratch_root):
+    backend = make_backend(scratch_root, **HF_DEF2SVP)
+    try:
+        result = backend.evaluate(water_request(n_mm=2))
+        assert result.esp_kj_mol_e is None
+        assert result.timings_s["vpot"] == 0.0
+        assert not (backend.scratch.current / "esp.xyz").exists()
+        assert backend.timings.rows[-1]["t_vpot"] == 0.0
+    finally:
+        backend.close()

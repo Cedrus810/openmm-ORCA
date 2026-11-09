@@ -75,3 +75,18 @@ def test_charge_count_mismatch():
     backend = FakeBackend(qm_charges_e=[0.0, 0.0])
     with pytest.raises(ValueError):
         backend.evaluate(make_request(REF_NM))
+
+
+def test_fake_esp_is_coulomb_and_charge_derivative():
+    """The fake ESP at a point equals dE/dq of a point charge placed there (S3, V3 Task 2)."""
+    from openmmorca.units import COULOMB_KJ_MOL_NM
+
+    fake = FakeBackend(qm_charges_e=[-0.8, 0.4, 0.4])
+    point = np.array([[0.4, -0.2, 0.1]])
+    request = QMRequest(qm_elements=ELEMENTS, qm_positions_nm=REF_NM, esp_points_nm=point)
+    esp = fake.evaluate(request).esp_kj_mol_e
+    d = np.linalg.norm(point - REF_NM, axis=1)
+    assert esp[0] == pytest.approx(COULOMB_KJ_MOL_NM * np.sum(np.array([-0.8, 0.4, 0.4]) / d), rel=1e-12)
+    h = 1e-3
+    energies = [fake.evaluate(make_request(REF_NM, point, np.array([s * h]))).energy_kj_mol for s in (1, -1)]
+    assert esp[0] == pytest.approx((energies[0] - energies[1]) / (2 * h), rel=1e-9)

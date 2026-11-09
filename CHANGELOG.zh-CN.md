@@ -4,6 +4,21 @@
 
 版本号对应 `docs/plans/2026-09-26-openmm-orca-implementation-plan.md` 的里程碑（M2 = v0.1，M3 = v0.2，M4 = v0.3，M5 = v0.4）。
 
+## 未发布 — 2026-11-09
+
+### 新增
+- 可选方案 S3（设计稿 §11.6）：`createMixedSystem(..., embeddingCutoff=None, ewaldCorrection=True)` 把 MM 电荷的“经典 Ewald 减全盒”势差补进 QM 计算（在 QM 质心处展开到 2 阶，用 50 个正则化赝点电荷表示），MM 与 QM 的相应力用赝电荷处的 QM 静电势计算。新模块 `openmmorca/qmmm/ewald_correction.py`。默认关闭；仍不是 PME 一致的（QM 电荷不进 PME，不计 QM 自身镜像）。
+- backend 协议：可选的 `QMRequest.esp_points_nm` / `QMResult.esp_kj_mol_e`。ORCA 后端在 SCF 后调用 `orca_vpot`（`orca_files.write_esp_points` / `read_vpot`）；`FakeBackend` 返回解析势。
+- timings 增加 `t_vpot`、`t_ewald`、`s3_q_absmax`、`s3_qm_extent_nm`；失败包保留 `esp.xyz`/`esp.out`/`esp.log`。
+- 测试：`tests/test_ewald_correction.py`；`tests/test_periodic_fake.py`、`tests/test_periodic_orca.py`、`tests/test_backend_base.py`、`tests/test_fake_backend.py`、`tests/test_orca_backend.py` 中的 S3 用例。
+
+### 变更
+- 设计稿 §1.2 允许 S3 作为可选模式（用户 2026-11-07 决定）；C1 §8 相应修改。
+
+### 验证
+- C2 误差来源：`docs/validation/2026-11-07-c2-error-mechanism.md`。S3：`docs/validation/2026-11-07-s3-v1-pyscf.md`、`…-s3-v2-orca.md`、`…-s3-v3-task0.md`，以及 `docs/plans/2026-11-07-s3-v3-implementation-plan.md` 的“进度”一节（首批相对嵌入误差 −10.26/−16.09 → +0.05/+0.06 kJ/mol；酶 r2SCAN-3c 有限差分 12 个分量最大差 0.034 kJ/mol/nm）。
+- 回归：`-m 'not orca and not slow'` 223 passed；`test_periodic_orca.py`、`test_orca_backend.py`、`test_potential_orca.py` 21 passed。slow 测试未跑。
+
 ## 未发布 — 2026-10-14
 
 ### 修复

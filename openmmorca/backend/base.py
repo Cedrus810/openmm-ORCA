@@ -20,6 +20,9 @@ class QMRequest:
     # Per-step bookkeeping from the OpenMM layer (e.g. embedding group counts),
     # recorded by backends that keep a timing log; never affects the result.
     diagnostics: dict = field(default_factory=dict)
+    # Optional points (nm) at which the backend must also return the QM electrostatic
+    # potential (nuclei + electrons, kJ/mol/e); used by the S3 Ewald correction.
+    esp_points_nm: np.ndarray | None = None
 
     def __post_init__(self) -> None:
         qm_positions = np.asarray(self.qm_positions_nm, dtype=float)
@@ -44,6 +47,13 @@ class QMRequest:
                 )
             object.__setattr__(self, "mm_positions_nm", mm_positions)
             object.__setattr__(self, "mm_charges_e", mm_charges)
+        if self.esp_points_nm is not None:
+            esp_points = np.asarray(self.esp_points_nm, dtype=float)
+            if esp_points.ndim != 2 or esp_points.shape[1] != 3 or len(esp_points) == 0:
+                raise ValueError(
+                    f"esp_points_nm must have shape (n_points, 3), got {esp_points.shape}"
+                )
+            object.__setattr__(self, "esp_points_nm", esp_points)
 
     @property
     def n_qm(self) -> int:
@@ -52,6 +62,10 @@ class QMRequest:
     @property
     def n_mm(self) -> int:
         return 0 if self.mm_positions_nm is None else self.mm_positions_nm.shape[0]
+
+    @property
+    def n_esp(self) -> int:
+        return 0 if self.esp_points_nm is None else self.esp_points_nm.shape[0]
 
 
 @dataclass(frozen=True)
@@ -62,6 +76,7 @@ class QMResult:
     qm_forces_kj_mol_nm: np.ndarray  # (n_qm, 3)
     mm_forces_kj_mol_nm: np.ndarray | None = None  # (n_mm, 3); required when n_mm > 0
     timings_s: dict[str, float] = field(default_factory=dict)
+    esp_kj_mol_e: np.ndarray | None = None  # (n_esp,); required when esp_points_nm is given
 
 
 class QMBackend(Protocol):
@@ -96,3 +111,11 @@ def check_result(request: QMRequest, result: QMResult) -> None:
             )
         if not np.all(np.isfinite(result.mm_forces_kj_mol_nm)):
             raise ValueError("mm_forces_kj_mol_nm contains non-finite values")
+    if request.n_esp > 0:
+        if result.esp_kj_mol_e is None:
+            raise ValueError("the request asks for the electrostatic potential at points")
+        esp = np.asarray(result.esp_kj_mol_e)
+        if esp.shape != (request.n_esp,):
+            raise ValueError(f"esp_kj_mol_e must have shape ({request.n_esp},), got {esp.shape}")
+        if not np.all(np.isfinite(esp)):
+            raise ValueError("esp_kj_mol_e contains non-finite values")

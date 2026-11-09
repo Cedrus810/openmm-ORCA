@@ -79,3 +79,29 @@ def test_check_result_rejects_nan():
 def test_check_result_rejects_wrong_shape():
     with pytest.raises(ValueError):
         check_result(make_request(n_mm=2), make_result(n_mm=2, mm_forces_kj_mol_nm=np.zeros((3, 3))))
+
+
+# ------------------------------------------------------------------
+# Optional electrostatic potential at points (S3, V3 plan Task 2)
+# ------------------------------------------------------------------
+
+
+def test_request_esp_points_shape():
+    assert make_request().n_esp == 0
+    assert make_request(esp_points_nm=np.zeros((4, 3))).n_esp == 4
+    for bad in (np.zeros((4, 2)), np.zeros(3), np.zeros((0, 3))):
+        with pytest.raises(ValueError):
+            make_request(esp_points_nm=bad)
+
+
+def test_check_result_requires_esp():
+    request = make_request(esp_points_nm=np.zeros((2, 3)))
+    base = dict(energy_kj_mol=0.0, qm_forces_kj_mol_nm=np.zeros((3, 3)),
+                mm_forces_kj_mol_nm=np.zeros((2, 3)))
+    with pytest.raises(ValueError, match="electrostatic potential"):
+        check_result(request, QMResult(**base))
+    with pytest.raises(ValueError):
+        check_result(request, QMResult(**base, esp_kj_mol_e=np.zeros(3)))
+    with pytest.raises(ValueError):
+        check_result(request, QMResult(**base, esp_kj_mol_e=np.array([0.0, np.nan])))
+    check_result(request, QMResult(**base, esp_kj_mol_e=np.zeros(2)))

@@ -35,17 +35,28 @@ from pathlib import Path
 
 import numpy as np
 from opi.core import Calculator
-from opi.execution.core import Runner
+from opi.execution.core import OrcaBinary, Runner
 from opi.input.structures import Atom, Structure
 from opi.output.core import Output
 
 from openmmorca.backend.base import QMRequest, QMResult, check_result
-from openmmorca.backend.orca_files import read_engrad, read_pcgrad, write_pointcharges
+from openmmorca.backend.orca_files import (
+    read_engrad,
+    read_pcgrad,
+    read_vpot,
+    write_esp_points,
+    write_pointcharges,
+)
 from openmmorca.errors import ORCACalculationError, ORCAOutputError, ORCATimeoutError
 from openmmorca.runtime.diagnostics import TimingLog, write_failure_bundle
 from openmmorca.runtime.restart import RestartState
 from openmmorca.runtime.scratch import ScratchDir
-from openmmorca.units import gradient_to_forces, hartree_to_kj_mol, nm_to_angstrom
+from openmmorca.units import (
+    HARTREE_IN_KJ_MOL,
+    gradient_to_forces,
+    hartree_to_kj_mol,
+    nm_to_angstrom,
+)
 
 # Task keywords that users may not request (the backend always computes EnGrad).
 _FORBIDDEN_KEYWORDS = frozenset(
@@ -195,6 +206,8 @@ class _StepOutput:
     t_orca: float
     t_read: float
     scf_cycles: int
+    esp_eh: np.ndarray | None = None  # (n_esp,) Eh/e, from orca_vpot
+    t_vpot: float = 0.0
 
 
 class ORCAOPIBackend:
@@ -405,6 +418,13 @@ class ORCAOPIBackend:
         match = _SCF_CYCLES_RE.search(out_text)
         scf_cycles = int(match.group(1)) if match else -1
 
+        esp_eh = None
+        t_vpot = 0.0
+        if request.n_esp > 0:
+            t_vpot0 = time.perf_counter()
+            esp_eh = self._run_vpot(request)
+            t_vpot = time.perf_counter() - t_vpot0
+
         return _StepOutput(
             energy_eh=energy_eh,
             qm_gradient=qm_gradient,
@@ -413,7 +433,41 @@ class ORCAOPIBackend:
             t_orca=t_orca,
             t_read=t_read,
             scf_cycles=scf_cycles,
+            esp_eh=esp_eh,
+            t_vpot=t_vpot,
         )
+
+    def _run_vpot(self, request: QMRequest) -> np.ndarray:
+        """QM electrostatic potential (nuclei + electrons, Eh/e) at request.esp_points_nm.
+
+        ``orca_vpot <gbw> <basename>.scfp <points> <output>`` on this step's SCF
+        density; it needs ``<basename>.densities`` and ``.densitiesinfo`` in
+        ``current/`` (2026-11-07 Task 0: agrees with dE/dq of a point charge to
+        ~1e-8 relative for r2SCAN-3c).
+        """
+        current = self.scratch.current
+        write_esp_points(current / "esp.xyz", nm_to_angstrom(request.esp_points_nm))
+        vpot = self._get_runner().get_orca_binary(OrcaBinary.ORCA).parent / "orca_vpot"
+        timeout = None if self.config.timeout_s is None else self.config.timeout_s
+        try:
+            proc = subprocess.run(
+                [str(vpot), f"{self.BASENAME}.gbw", f"{self.BASENAME}.scfp", "esp.xyz", "esp.out"],
+                cwd=current,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise ORCATimeoutError(
+                f"orca_vpot exceeded the time limit of {self.config.timeout_s} s (step {request.step})"
+            ) from exc
+        (current / "esp.log").write_text(proc.stdout + proc.stderr)
+        if proc.returncode != 0:
+            raise ORCAOutputError(
+                f"orca_vpot failed with return code {proc.returncode} in {current}; "
+                f"last lines:\n{self._output_tail('esp.log')}"
+            )
+        return read_vpot(current / "esp.out", request.n_esp)
 
     def _write_failure_bundle(self, request: QMRequest, exc: Exception) -> None:
         if not self.config.keep_failed:
@@ -521,6 +575,10 @@ class ORCAOPIBackend:
                 "fresh_retries": self.n_fresh_retries,
                 "n_embed_groups": request.diagnostics.get("n_embed_groups", 0),
                 "embed_changed": request.diagnostics.get("embed_changed", 0),
+                "t_vpot": step_output.t_vpot,
+                "t_ewald": request.diagnostics.get("t_ewald", 0.0),
+                "s3_q_absmax": request.diagnostics.get("s3_q_absmax", 0.0),
+                "s3_qm_extent_nm": request.diagnostics.get("s3_qm_extent_nm", 0.0),
             }
         )
 
@@ -536,8 +594,12 @@ class ORCAOPIBackend:
                 "write": t_write,
                 "orca": t_orca,
                 "read": t_read,
+                "vpot": step_output.t_vpot,
                 "total": t_total,
             },
+            esp_kj_mol_e=(
+                step_output.esp_eh * HARTREE_IN_KJ_MOL if step_output.esp_eh is not None else None
+            ),
         )
         check_result(request, result)
         return result

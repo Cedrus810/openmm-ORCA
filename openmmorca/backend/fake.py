@@ -77,11 +77,18 @@ class FakeBackend:
             qm_forces += np.sum(coeff[:, :, None] * mm_disp, axis=1)
             mm_forces = -np.sum(coeff[:, :, None] * mm_disp, axis=0)
 
+        esp = None
+        if request.n_esp > 0:
+            # Exact dE/dq at a point for this potential: Coulomb potential of the fake charges.
+            d = np.linalg.norm(request.esp_points_nm[:, None, :] - qm[None, :, :], axis=-1)
+            esp = COULOMB_KJ_MOL_NM * (self.qm_charges_e[None, :] / d).sum(axis=1)
+
         result = QMResult(
             energy_kj_mol=energy,
             qm_forces_kj_mol_nm=qm_forces,
             mm_forces_kj_mol_nm=mm_forces,
             timings_s={"total": 0.0},
+            esp_kj_mol_e=esp,
         )
         check_result(request, result)
         self.n_calls += 1

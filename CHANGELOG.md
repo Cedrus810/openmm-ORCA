@@ -4,6 +4,21 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 
 Versions follow the milestones of `docs/plans/2026-09-26-openmm-orca-implementation-plan.md` (M2 = v0.1, M3 = v0.2, M4 = v0.3, M5 = v0.4).
 
+## Unreleased — 2026-11-09
+
+### Added
+- Optional scheme S3 (spec §11.6): `createMixedSystem(..., embeddingCutoff=None, ewaldCorrection=True)` adds the classical Ewald-minus-whole-box potential of the MM charges to the QM calculation (second-order Taylor expansion about the QM centre, 50 regularized pseudo point charges), with MM and QM forces from the QM electrostatic potential at the pseudo charges. New module `openmmorca/qmmm/ewald_correction.py`. Off by default; still not PME-consistent (QM charges stay out of PME, no QM self images).
+- Backend protocol: optional `QMRequest.esp_points_nm` / `QMResult.esp_kj_mol_e`. The ORCA backend runs `orca_vpot` after the SCF (`orca_files.write_esp_points` / `read_vpot`); `FakeBackend` returns the analytic potential.
+- Timings gain `t_vpot`, `t_ewald`, `s3_q_absmax`, `s3_qm_extent_nm`; failure bundles keep `esp.xyz`/`esp.out`/`esp.log`.
+- Tests: `tests/test_ewald_correction.py`; S3 cases in `tests/test_periodic_fake.py`, `tests/test_periodic_orca.py`, `tests/test_backend_base.py`, `tests/test_fake_backend.py`, `tests/test_orca_backend.py`.
+
+### Changed
+- Spec §1.2 now allows S3 as an optional mode (user decision 2026-11-07); C1 §8 updated accordingly.
+
+### Validation
+- C2 error mechanism: `docs/validation/2026-11-07-c2-error-mechanism.md`. S3: `docs/validation/2026-11-07-s3-v1-pyscf.md`, `…-s3-v2-orca.md`, `…-s3-v3-task0.md`, progress section of `docs/plans/2026-11-07-s3-v3-implementation-plan.md` (pilot relative embedding error −10.26/−16.09 → +0.05/+0.06 kJ/mol; enzyme r2SCAN-3c finite differences, 12 components, max 0.034 kJ/mol/nm).
+- Regression: `-m 'not orca and not slow'` 223 passed; `test_periodic_orca.py`, `test_orca_backend.py`, `test_potential_orca.py` 21 passed. Slow tests not run.
+
 ## Unreleased — 2026-10-14
 
 ### Fixed

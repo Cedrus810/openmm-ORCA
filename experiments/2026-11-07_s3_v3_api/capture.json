@@ -1,0 +1,41 @@
+{
+  "0": {
+    "real_part_identical_to_pilot": true,
+    "pseudo_positions_max_diff_nm": 0.0,
+    "pseudo_charges_max_diff_e": 5.580593043230664e-08,
+    "esp_points_are_pseudo": true,
+    "diagnostics": {
+      "n_embed_groups": 9355.0,
+      "embed_changed": 9355.0,
+      "t_ewald": 0.316894174029585,
+      "s3_q_absmax": 0.17475509251320506,
+      "s3_qm_extent_nm": 0.37162177744096403
+    }
+  },
+  "4": {
+    "real_part_identical_to_pilot": true,
+    "pseudo_positions_max_diff_nm": 0.0,
+    "pseudo_charges_max_diff_e": 3.483379056867797e-07,
+    "esp_points_are_pseudo": true,
+    "diagnostics": {
+      "n_embed_groups": 9355.0,
+      "embed_changed": 389.0,
+      "t_ewald": 0.31489035103004426,
+      "s3_q_absmax": 0.1990089975570833,
+      "s3_qm_extent_nm": 0.3623186231941537
+    }
+  },
+  "8": {
+    "real_part_identical_to_pilot": true,
+    "pseudo_positions_max_diff_nm": 0.0,
+    "pseudo_charges_max_diff_e": 2.3470265628211529e-07,
+    "esp_points_are_pseudo": true,
+    "diagnostics": {
+      "n_embed_groups": 9355.0,
+      "embed_changed": 458.0,
+      "t_ewald": 0.31643824896309525,
+      "s3_q_absmax": 0.19349828334783276,
+      "s3_qm_extent_nm": 0.41420950290688174
+    }
+  }
+}

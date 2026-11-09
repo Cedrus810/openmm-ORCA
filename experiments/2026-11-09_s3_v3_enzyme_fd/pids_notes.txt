@@ -1,0 +1,5 @@
+2026-11-09 13:22 first launch: 819095 = ssh "bash -c" subshell (cd && setsid ... & kept the ssh channel open), 819096 = run_fd.sh.
+All 25 jobs ended at 13:25:30 when that ssh session (session-920) closed; no results. Probe 821699 (sleep, launched with
+"cd DIR; setsid nohup CMD ... &") survived its session closing; killed after the check.
+Correction (13:31): the first launch was NOT killed. All 25 out/*.json were written at 13:25 (visible from 183); 181's NFS
+view of out/ and logs/ was stale. session-920 ended because its processes finished. The second launch (821739) skipped all.

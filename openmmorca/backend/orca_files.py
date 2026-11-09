@@ -6,7 +6,10 @@ Only three formats (spec §2.3–§2.5, §8.4):
   ``%pointcharges`` file, the only supported embedding route;
 * ``.engrad``:    N, total energy (Eh), 3N gradient rows (Eh/bohr), then N
   ``Z x y z`` rows (bohr);
-* ``.pcgrad``:    N, then N gradient rows (Eh/bohr), one per point charge.
+* ``.pcgrad``:    N, then N gradient rows (Eh/bohr), one per point charge;
+* ``orca_vpot`` points (N, then ``x y z`` in bohr) and output (N, then
+  ``x y z V``, V in Eh/e), for the S3 electrostatic potential (verified
+  2026-11-07, ``docs/validation/2026-11-07-s3-v3-task0.md``).
 
 ORCA/OPI provides no readers for the last two; they live here so that no
 other module ever touches ORCA file formats.
@@ -19,6 +22,7 @@ from pathlib import Path
 import numpy as np
 
 from openmmorca.errors import ORCAOutputError
+from openmmorca.units import BOHR_IN_ANGSTROM
 
 
 def write_pointcharges(path: Path, charges_e, positions_ang) -> None:
@@ -112,3 +116,34 @@ def read_pcgrad(path: Path, n_charges: int) -> np.ndarray:
             f"{path}: pcgrad rows do not have 3 components ({gradient.shape})"
         )
     return gradient
+
+
+def write_esp_points(path: Path, positions_ang) -> None:
+    """Points file for ``orca_vpot``: count, then one ``x y z`` row per point in bohr."""
+    positions = np.asarray(positions_ang, dtype=float).reshape(-1, 3) / BOHR_IN_ANGSTROM
+    lines = [f"{len(positions)}"] + [f"{x:.10f} {y:.10f} {z:.10f}" for x, y, z in positions]
+    Path(path).write_text("\n".join(lines) + "\n")
+
+
+def read_vpot(path: Path, n_points: int) -> np.ndarray:
+    """Read ``orca_vpot`` output (count, then ``x y z V`` rows); return V in Eh/e."""
+    path = Path(path)
+    if not path.is_file():
+        raise ORCAOutputError(f"{path}: file not found")
+    data = [line for line in path.read_text().splitlines() if line.strip()]
+    try:
+        declared = int(_parse_float(data[0], path, "point-count line"))
+    except IndexError as exc:
+        raise ORCAOutputError(f"{path}: file too short to be orca_vpot output") from exc
+    if declared != n_points or len(data) < 1 + n_points:
+        raise ORCAOutputError(f"{path}: expected {n_points} potential rows")
+    values = []
+    for i in range(n_points):
+        tokens = data[1 + i].split()
+        if len(tokens) != 4:
+            raise ORCAOutputError(f"{path}: row {i + 1} does not have 4 columns")
+        values.append(_parse_float(tokens[3], path, f"potential row {i + 1}"))
+    values = np.array(values)
+    if not np.all(np.isfinite(values)):
+        raise ORCAOutputError(f"{path}: non-finite potential")
+    return values
