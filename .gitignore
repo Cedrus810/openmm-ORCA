@@ -27,8 +27,6 @@ experiments/**/*
 !experiments/2026-10-14_t08_pyscf_crosscheck/orca_verytight_norijcosx.qm.inp
 !experiments/2026-10-14_t09_cutoff_scan/scan/analysis.json
 !experiments/2026-10-15_b1_embedding_charge/b1_results.json
-!experiments/2026-10-15_b2_crossing_events/b2_results.json
-!experiments/2026-10-15_b2_crossing_events/jobs.json
 !experiments/2026-10-29_b5_scope/b5_results.json
 !experiments/2026-10-29_b5_scope/frames_a_s2.json
 !experiments/2026-10-29_b5_scope/frames_c_s0.json
