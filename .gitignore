@@ -15,3 +15,24 @@ oniom_cluster.csv
 # 项目本地文件
 .commit_drafts/
 researchd.plan.toml
+
+# experiments 运行产物:默认全部忽略,只保留脚本与白名单内的汇总 json / 输入文件
+experiments/**/*
+!experiments/**/
+!experiments/**/*.py
+!experiments/**/*.sh
+!experiments/**/*.zsh
+!experiments/2026-10-14_t08_pyscf_crosscheck/comparison.json
+!experiments/2026-10-14_t08_pyscf_crosscheck/orca_default.qm.inp
+!experiments/2026-10-14_t08_pyscf_crosscheck/orca_verytight_norijcosx.qm.inp
+!experiments/2026-10-14_t09_cutoff_scan/scan/analysis.json
+!experiments/2026-10-15_b1_embedding_charge/b1_results.json
+!experiments/2026-10-15_b2_crossing_events/b2_results.json
+!experiments/2026-10-15_b2_crossing_events/jobs.json
+!experiments/2026-10-29_b5_scope/b5_results.json
+!experiments/2026-10-29_b5_scope/frames_a_s2.json
+!experiments/2026-10-29_b5_scope/frames_c_s0.json
+!experiments/2026-11-06_c2_matched_pilot/input_checks.json
+!experiments/2026-11-06_c2_matched_pilot/inputs/selection.json
+!experiments/2026-11-07_s3_v1_pyscf/pseudo_conditioning.json
+!experiments/2026-11-07_s3_v3_prep/vpot/base_files/qm.inp
