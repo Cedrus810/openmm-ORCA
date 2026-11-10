@@ -1,0 +1,32 @@
+{
+  "passed": true,
+  "checks": [
+    {
+      "candidate": 0,
+      "real_qm_coordinate_max_error_nm": 0.0,
+      "link_coordinate_max_error_nm": 0.0,
+      "s0_s2_qm_equal": true,
+      "box_equal": true,
+      "s2_n_mm": 31952,
+      "s0_n_mm": 1783
+    },
+    {
+      "candidate": 4,
+      "real_qm_coordinate_max_error_nm": 0.0,
+      "link_coordinate_max_error_nm": 0.0,
+      "s0_s2_qm_equal": true,
+      "box_equal": true,
+      "s2_n_mm": 31952,
+      "s0_n_mm": 1827
+    },
+    {
+      "candidate": 8,
+      "real_qm_coordinate_max_error_nm": 0.0,
+      "link_coordinate_max_error_nm": 0.0,
+      "s0_s2_qm_equal": true,
+      "box_equal": true,
+      "s2_n_mm": 31952,
+      "s0_n_mm": 1913
+    }
+  ]
+}
